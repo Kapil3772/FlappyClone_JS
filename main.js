@@ -212,7 +212,7 @@ class Camera extends Rect {
     //this.yPos = this.entity.yPos;
     
     //calculating camera offset
-    this.cameraOffsetX = (this.game.vCanvas.width / 6.0) - this.xPos;
+    this.cameraOffsetX = (this.game.vCanvas.width / 8.0) - this.xPos;
     this.cameraOffsetY = (this.game.vCanvas.height / 2.0) - this.yPos;
   }
   render(ctx){
@@ -246,14 +246,14 @@ class Enemy extends PhysicsRect{
     
     //Animation dependecies
     this.currAnimState = EnemyAnimState.IDLE;
-    this.nextAnimState;
+    this.nextAnimState = this.currAnimState;
     this.animPlayerRegistry = {
       "IDLE": new AnimationPlayer(this.game.enemyIdle)
     };
     this.currAnimPlayer = this.animPlayerRegistry[this.currAnimState];
     
     //render dependencies
-    this.imgScalingFactor = 1;
+    this.imgScalingFactor = 2.2;
     this.finalRenderOffset = new RenderOffset(0, 0, 0, 0);
     this.animRenderOffset = new RenderOffset(0, 0, 0, 0);
   }
@@ -295,7 +295,7 @@ render(ctx) {
     ctx.fillStyle = "black";
     ctx.fillRect(
       this.alphaX + this.game.camera.cameraOffsetX,
-      this.alphaY,
+      this.alphaY + this.game.camera.cameraOffsetY,
       this.w,
       this.h
     );
@@ -305,7 +305,7 @@ render(ctx) {
   this.updateRenderOffset();
   
   const renderX = this.alphaX + this.game.camera.cameraOffsetX + this.finalRenderOffset.xPos;
-  const renderY = this.alphaY + this.finalRenderOffset.yPos;
+  const renderY = this.alphaY + this.game.camera.cameraOffsetY + this.finalRenderOffset.yPos;
   const renderW = this.img.width * this.imgScalingFactor + this.finalRenderOffset.w;
   const renderH = this.img.height * this.imgScalingFactor + this.finalRenderOffset.h;
   
@@ -330,7 +330,7 @@ render(ctx) {
   ctx.strokeStyle = "red";
   ctx.strokeRect(
     this.alphaX + this.game.camera.cameraOffsetX,
-    this.alphaY,
+    this.alphaY + this.game.camera.cameraOffsetY,
     this.w,
     this.h
   );
@@ -637,6 +637,8 @@ class Game {
     //camera object
     this.camera = new Camera(this.player.xPos,this.player.yPos,10,10,this.player,this);
     
+    this.enemy = new Enemy(120, 100, 22,24,this);
+    
     this.run();
   }
   run(){
@@ -694,6 +696,8 @@ class Game {
     const playerJumpFrames = await this.loader.loadImagesFromFolder("./assets/player/jump/",4);
     const playerGlideFrames = await this.loader.loadImagesFromFolder("./assets/player/glide/",4);
     const playerAttack1Frames = await this.loader.loadImagesFromFolder("./assets/player/attack1Fx/",6);
+    //Enemy Animation frames
+    const enemyIdleFrames = await this.loader.loadImagesFromFolder("./assets/enemy/idleRight/",4);
     //Animation Objects
 
     this.playerIdle = new Animation(playerIdleFrames,5,true);
@@ -704,19 +708,24 @@ class Game {
     this.playerGlide.renderOffset.setOffsets(0,-10,0,0);
     this.playerAttack1 = new Animation(playerAttack1Frames, 6, false);
     
+    this.enemyIdle = new Animation(enemyIdleFrames,5,true);
+    this.enemyIdle.renderOffset.setOffsets(-9,-20,0,0);
   }
   
   update(dt){
     this.player.update(dt);
     this.camera.update(dt);
+    this.enemy.update(dt);
   }
   
   updateInterpolation(ipf){
     this.player.updateInterpolation(ipf);
+    this.enemy.updateInterpolation(ipf);
   }
   
   updateAnimation(deltaTime){
     this.player.updateAnimation(deltaTime);
+    this.enemy.updateAnimation(deltaTime);
   }
   render(ctx){
     //Clearing screen
@@ -730,6 +739,9 @@ class Game {
       4, 4
     );
     
+    //enemy render
+    this.enemy.render(ctx);
+    
     //player render
     this.player.render(ctx);
     this.camera.render(ctx);
@@ -739,7 +751,7 @@ class Game {
     this.ctx.drawImage(
       this.vCanvas,
       0,0,this.vCanvas.width,this.vCanvas.height,
-      0,0,this.vCanvas.width*2,this.vCanvas.height*2
+      0,0,this.vCanvas.width *2,this.vCanvas.height *2
     );
   }
 }

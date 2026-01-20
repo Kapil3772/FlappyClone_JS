@@ -44,7 +44,7 @@ class GameImage {
   }
   async loadImagesFromFolder(path,count){
     const imgs = [];
-    for(i=0; i<count; i++){
+    for(let i=0; i<count; i++){
       try{
       const img = await this.loadImage(path + i +".png");
         imgs.push(img);
@@ -139,14 +139,12 @@ class Background {
 }
 
 class Animation{
-  constructor(path,framesCount,animFrequency,looping, game){
-    this.game = game;
-    this.framesCount = framesCount;
+  constructor(frames,animFrequency,looping){
+    this.framesCount = frames.length;
     this.framesDuration = 1.0/animFrequency;
-    this.frames = this.loadAnimationFromFolder(path,this.framesCount);
-  }
-  loadAnimationFromFolder(path, count) {
-    return this.game.loader.loadImagesFromFolder(path, count)
+    this.frames = frames;
+    this.looping = looping;
+    this.renderOffset = new RenderOffset(0,0,0,0);
   }
 }
 
@@ -156,21 +154,34 @@ class AnimationPlayer {
     this.isDone = false;
     this.animationTime = 0.0;
     this.currentFrame = 0;
+    this.totalFramesElapsed = 1;
   }
   
-  getCurrentFrame(dt){
+  getCurrentFrame(dt) {
     this.animationTime += dt;
-    if(this.animationTime >= this.animation.framesDuration){
-      this.currentFrame = (++this.currentFrame % this.animation.framesCount);
-      this.animationTime -= this.animation.framesDuration;
+
+    if (this.animationTime >= this.animation.framesDuration) {
+        this.currentFrame++;
+        this.animationTime -= this.animation.framesDuration;
+
+        if (this.currentFrame >= this.animation.framesCount) {
+            if (this.animation.looping) {
+                this.currentFrame = 0;
+            } else {
+                this.currentFrame = this.animation.framesCount - 1;
+                this.isDone = true;
+            }
+        }
     }
+
     return this.animation.frames[this.currentFrame];
-  }
+}
   
   reset(){
     this.animationTime = 0.0;
     this.currentFrame = 0;
     this.isDone = false;
+    this.totalFramesElapsed = 1;
   }
 }
 
@@ -197,94 +208,242 @@ class Camera extends Rect {
     //this.yPos = this.entity.yPos;
     
     //calculating camera offset
-    this.cameraOffsetX = (this.game.vCanvas.width / 8.0) - this.xPos;
+    this.cameraOffsetX = (this.game.vCanvas.width / 6.0) - this.xPos;
     this.cameraOffsetY = (this.game.vCanvas.height / 2.0) - this.yPos;
   }
   render(ctx){
     //visually showing camera
     ctx.fillStyle = "yellow";
-    ctx.fillRect(this.centerX() + this.cameraOffsetX, this.centerY() + this.cameraOffsetY, this.w,this.h);
+    ctx.fillRect(this.xPos + this.cameraOffsetX, this.yPos + this.cameraOffsetY, this.w,this.h);
     ctx.strokeStyle = "black";
-    ctx.strokeRect(this.centerX() + this.cameraOffsetX,this.centerY() + this.cameraOffsetY, this.w,this.h);
+    ctx.strokeRect(this.xPos + this.cameraOffsetX, this.yPos + this.cameraOffsetY, this.w,this.h);
   }
+}
+
+const PlayerAnimState = {
+  IDLE: "IDLE",
+  GLIDE: "GLIDE",
+  JUMP: "JUMP"
 }
 
 class Player extends PhysicsRect {
   constructor(x,y,w,h, game){
     super(x,y,w,h);
-    this.velocityX = 80.0;//80px per sec
+    this.velocityX = 0.0;//80px per sec
     this.velocityY = 0.0;
     this.direction = 1;
     this.game = game;
     
     //Interpolated Position
-    this.alphaX;
-    this.alphaY;
+    this.alphaX = this.xPos;
+    this.alphaY = this.yPos;
     
     //Flags
     this.onAir = true;
     this.isJumping = false;
     this.isFalling = true;
-    this.movingRight = false;
+    this.facingRight = true;
     this.jumpHandeled = false;
+    this.jumpDirection = 0;
+    this.isGliding = false;
     
     //factors
     this.fallFactor = 2.0;
     this.gravityFactor = 1.0;
+    this.glideGravityFactor = 0.30;
+    this.maxGlideFallVelocity = 60;
+    this.maxGlideVelocity = 130;
     
+    //Animation dependecies
+    this.currAnimState = PlayerAnimState.IDLE;
+    this.nextAnimState;
+    this.animPlayerRegistry = {
+      "IDLE" : new AnimationPlayer(this.game.playerIdle),
+      "JUMP" : new AnimationPlayer(this.game.playerJump),
+      "GLIDE" : new AnimationPlayer(this.game.playerGlide)
+    };
+    this.currAnimPlayer = this.animPlayerRegistry[this.currAnimState];
+    
+    //render dependencies
+    this.imgScalingFactor = 1.5;
+    this.finalRenderOffset = new RenderOffset(0,0,0,0);
+    this.animRenderOffset = new RenderOffset(0,0,0,0);
   }
   
   jump(){
-    this.velocityY = -180;
+    this.velocityY = -140;
+    this.velocityX = 180 * this.jumpDirection;
     this.jumpHandeled = false;
+    this.isJumping = true;
   }
   
   update(dt){
+    this.prevX = this.xPos;
+    this.prevY = this.yPos;
+    console.log(this.game.inputs.leftJumpPressed + ", " + this.game.inputs.rightJumpPressed);
+    this.jumpDirection = this.game.inputs.rightJumpPressed - this.game.inputs.leftJumpPressed;
     //flags Check
     if(this.velocityX > 0){
-      this.movingRight = true;
+      this.facingRight = true;
+    }
+    if(this.velocityX < 0){
+      this.facingRight = false;
+    }
+    //Applying AirFriction
+    if(!this.isGliding){
+      if(this.facingRight){
+        this.velocityX = Math.max(0,this.velocityX - (this.game.AIR_FRICTION * dt));
+      }else{
+        this.velocityX = Math.min(0,this.velocityX + (this.game.AIR_FRICTION * dt));
+      }
     }
     if(this.velocityY > 0){
       this.isFalling = true;
+      this.isJumping = false;
     }
     if(this.velocityY < 0){
       this.isFalling = false;
     }
     
     this.fallFactor = Math.abs(this.velocityY)>70?2.0:1.0;
+    
+  this.prevX = this.xPos;
   //X direction handel
+  
+  if(this.gliding){
+    this.velocityX = this.maxGlideVelocity;
+  }
+  
   this.xPos += this.velocityX *this.direction * dt;
   
-  //Y direction handel
-  if(this.game.inputs.jumpPressed && !this.jumpHandeled){
-    this.jumpHandeled = true;
+  //jump handel
+  if((this.game.inputs.leftJumpPressed && !this.game.inputs.leftJumpHandeled) && this.jumpDirection !== 0 || (this.game.inputs.rightJumpPressed && !this.game.inputs.rightJumpHandeled)){
+    if(!this.game.inputs.leftJumpHandeled){
+      this.game.inputs.leftJumpHandeled = true;
+    }
+    if(!this.game.rightJumpHandeled){
+      this.game.inputs.rightJumpHandeled = true;
+    }
     this.jump();
   }
   
+  //Y direction handel
+  if(this.onAir && this.game.inputs.jumpPressed && this.velocityY > 0){
+    this.isGliding = true;
+  }else{
+    this.isGliding = false;
+  }
+    if(this.isGliding){
+      this.gravityFactor = this.glideGravityFactor;
+      
+    }else{
+      this.gravityFactor = 1.0;
+  }
   //half dt handel
-  let dy = this.velocityY * this.fallFactor* this.gravityFactor * dt/2.0;
+  let dy = this.velocityY * this.gravityFactor * dt/2.0;
   this.yPos += dy;
+  
   //other half dt handel
   this.velocityY = Math.min(this.velocityY + (this.game.ACCLN_DUE_GRAVITY * this.fallFactor *this.gravityFactor*dt), this.game.BASE_TERMINAL_VELOCITY);
+  
+  if(this.isGliding){
+    this.velocityY = Math.min(this.velocityY, this.maxGlideFallVelocity);
+  }
   
   dy = this.velocityY * dt/2.0;
   
   this.yPos += dy;
+  
+  }
+  
+  updateInterpolation(ipf){
+    this.alphaX = this.prevX + ((this.xPos - this.prevX) * ipf);
+    this.alphaY = this.prevY + ((this.yPos - this.prevY) * ipf);
+  }
+  
+  updateAnimation(deltaTime){
+    //updating anim render offset
+    if(this.isJumping){
+      this.nextAnimState = PlayerAnimState.JUMP;
+    }else if(this.isGliding){
+      this.nextAnimState = PlayerAnimState.GLIDE;
+    }else{
+      this.nextAnimState = PlayerAnimState.IDLE;
+    }
+    
+    if(this.nextAnimState != this.currAnimState){
+      this.currAnimState = this.nextAnimState;
+      this.currAnimPlayer = this.animPlayerRegistry[this.currAnimState];
+      this.currAnimPlayer.reset();
+    }
+    
+    this.animRenderOffset = this.currAnimPlayer.animation.renderOffset;
+    
+    this.img = this.currAnimPlayer.getCurrentFrame(deltaTime);
+  }
+  
+  updateRenderOffset(){
+    this.finalRenderOffset.xPos = this.animRenderOffset.xPos + (this.w - (this.img.width * this.imgScalingFactor) / 2.0);
+    this.finalRenderOffset.yPos = this.animRenderOffset.yPos + (this.h - this.img.height);
+    this.finalRenderOffset.w = this.animRenderOffset.w;
+    this.finalRenderOffset.h = this.animRenderOffset.h;
   }
   
   render(ctx){
-    ctx.fillStyle = "black";
-    ctx.fillRect(
-      this.xPos + this.game.camera.cameraOffsetX,
-      this.yPos,
-      this.w,
-      this.h);
+    if(this.img == null) {
+      //fallback
+      console.log("player sprite is null");
+      ctx.fillStyle = "black";
+      ctx.fillRect(
+        this.alphaX + this.game.camera.cameraOffsetX,
+        this.alphaY,
+        this.w,
+        this.h);
+        return;
+    }
+    this.updateRenderOffset();
+    //imgsprite
+    if(this.facingRight){
+    ctx.drawImage(
+      this.img,
+      this.alphaX + this.game.camera.cameraOffsetX + this.finalRenderOffset.xPos,
+      this.alphaY + this.finalRenderOffset.yPos,
+      this.img.width*this.imgScalingFactor + this.finalRenderOffset.w,
+      this.img.height*this.imgScalingFactor + this.finalRenderOffset.h
+    );
+    //physics debug box
+    ctx.strokeStyle = "black";
+      ctx.strokeRect(
+        this.alphaX + this.game.camera.cameraOffsetX,
+        this.alphaY,
+        this.w,
+        this.h);
+    //image degug box
+    ctx.strokeStyle = "blue";
+      ctx.strokeRect(
+        this.alphaX + this.game.camera.cameraOffsetX + this.finalRenderOffset.xPos,
+      this.alphaY + this.finalRenderOffset.yPos,
+      this.img.width*this.imgScalingFactor + this.finalRenderOffset.w,
+      this.img.height*this.imgScalingFactor + this.finalRenderOffset.h);
+    }else{
+      ctx.drawImage(
+      this.img,
+      this.alphaX + this.game.camera.cameraOffsetX + this.finalRenderOffset.xPos,
+      this.alphaY + this.finalRenderOffset.yPos,
+      this.img.width*this.imgScalingFactor + this.finalRenderOffset.w,
+      this.img.height*this.imgScalingFactor + this.finalRenderOffset.h
+    );
+    }
   }
 }
 
 class GameInputs{
   jumpPressed = false;
-  jumpReleased = false;
+  jumpReleased = true;
+  leftJumpPressed = 0;
+  rightJumpPressed = 0;
+  leftJumpHandeled = true;
+  rightJumpHandeled = true;
 }
 class Game {
   //Game constants
@@ -296,6 +455,8 @@ class Game {
   UPDATE_STEP_DURATION = 1.0/this.UPDATE_FPS;
   LOOP_STEP_DURATION = 1.0/this.LOOP_FPS;
   ACCLN_DUE_GRAVITY = 150; // px per sec²
+  AIR_FRICTION = 50;
+  
   BASE_TERMINAL_VELOCITY = 300; // px per sec
   
   //Game booleans
@@ -384,6 +545,13 @@ class Game {
           this.update(this.UPDATE_STEP_DURATION);
           this.updateAccumulator -= this.UPDATE_STEP_DURATION;
         }
+        
+        //other updates
+        const ipf = (this.UPDATE_STEP_DURATION - this.updateAccumulator)/this.UPDATE_STEP_DURATION;
+        this.updateInterpolation(ipf);
+        
+        this.updateAnimation(this.deltaTime);
+        //game render
         this.render(this.vCtx);
         
         this.computedFrameDuration = performance.now() -this.nowMs;
@@ -407,7 +575,14 @@ class Game {
     
     //Animation Objects
     //Player Animations
-   //this.playerIdle = new Animation("./assets/player/");
+    const playerIdleFrames = await this.loader.loadImagesFromFolder("./assets/player/idleFx/", 5);
+    const playerJumpFrames = await this.loader.loadImagesFromFolder("./assets/player/jump/",4);
+    const playerGlideFrames = await this.loader.loadImagesFromFolder("./assets/player/glide/",4);
+    
+    this.playerIdle = new Animation(playerIdleFrames,5,true);
+    this.playerIdle.renderOffset.setOffsets(-8,0,0,0);
+    this.playerJump = new Animation(playerJumpFrames,10,false);
+    this.playerGlide = new Animation(playerGlideFrames,4,true);
   }
   
   update(dt){
@@ -415,6 +590,13 @@ class Game {
     this.camera.update(dt);
   }
   
+  updateInterpolation(ipf){
+    this.player.updateInterpolation(ipf);
+  }
+  
+  updateAnimation(deltaTime){
+    this.player.updateAnimation(deltaTime);
+  }
   render(ctx){
     //Clearing screen
     ctx.clearRect(0,0,this.vCanvas.width,this.vCanvas.height);
@@ -441,12 +623,41 @@ class Game {
   }
 }
 const game = new Game();
-document.body.addEventListener("touchstart", () => {
-      game.inputs.jumpPressed = true;
-      game.inputs.jumpReleased = false;
-      });
-document.body.addEventListener("touchend", () => {
-  game.inputs.jumpReleased = true;
-  game.inputs.jumpPressed = false;
+
+document.body.addEventListener("touchstart", (e) => {
+  const screenMid = window.innerWidth / 2;
+
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    const touchX = e.changedTouches[i].clientX;
+
+    game.inputs.jumpPressed = true;
+    game.inputs.jumpReleased = false;
+
+    if (touchX < screenMid) {
+      game.inputs.leftJumpPressed = 1;
+      game.inputs.leftJumpHandeled = false;
+    }
+    else if (touchX >= screenMid) {
+      game.inputs.rightJumpPressed = 1;
+      game.inputs.rightJumpHandeled = false;
+    }
+  }
+
+  if (game.inputs.leftJumpPressed && game.inputs.rightJumpPressed) {
+    game.inputs.leftJumpPressed = 0;
+    game.inputs.rightJumpPressed = 0;
+  }
 });
 
+document.body.addEventListener("touchend", (e) => {
+  if (e.touches.length === 0) {
+    game.inputs.jumpReleased = true;
+    game.inputs.jumpPressed = false;
+
+    game.inputs.leftJumpPressed = 0;
+    game.inputs.rightJumpPressed = 0;
+
+    game.inputs.leftJumpHandeled = true;
+    game.inputs.rightJumpHandeled = true;
+  }
+});

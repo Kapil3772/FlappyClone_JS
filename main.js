@@ -31,6 +31,10 @@ class PhysicsRect extends Rect {
     this.prevX = x;
     this.prevY = y;
   }
+  intersects(rect){
+    return this.right() > rect.left() && this.bottom() > rect.top() &&
+    this.left() < rect.right() && this.top() < rect.bottom();
+  }
 }
 
 class GameImage {
@@ -252,7 +256,7 @@ class Player extends PhysicsRect {
     this.gravityFactor = 1.0;
     this.glideGravityFactor = 0.30;
     this.maxGlideFallVelocity = 60;
-    this.maxGlideVelocity = 130;
+    this.maxGlideVelocity = 190;
     
     //Animation dependecies
     this.currAnimState = PlayerAnimState.IDLE;
@@ -265,7 +269,7 @@ class Player extends PhysicsRect {
     this.currAnimPlayer = this.animPlayerRegistry[this.currAnimState];
     
     //render dependencies
-    this.imgScalingFactor = 1.5;
+    this.imgScalingFactor = 2;
     this.finalRenderOffset = new RenderOffset(0,0,0,0);
     this.animRenderOffset = new RenderOffset(0,0,0,0);
   }
@@ -280,7 +284,6 @@ class Player extends PhysicsRect {
   update(dt){
     this.prevX = this.xPos;
     this.prevY = this.yPos;
-    console.log(this.game.inputs.leftJumpPressed + ", " + this.game.inputs.rightJumpPressed);
     this.jumpDirection = this.game.inputs.rightJumpPressed - this.game.inputs.leftJumpPressed;
     //flags Check
     if(this.velocityX > 0){
@@ -307,7 +310,6 @@ class Player extends PhysicsRect {
     
     this.fallFactor = Math.abs(this.velocityY)>70?2.0:1.0;
     
-  this.prevX = this.xPos;
   //X direction handel
   
   if(this.gliding){
@@ -383,58 +385,60 @@ class Player extends PhysicsRect {
   }
   
   updateRenderOffset(){
+    
     this.finalRenderOffset.xPos = this.animRenderOffset.xPos + (this.w - (this.img.width * this.imgScalingFactor) / 2.0);
     this.finalRenderOffset.yPos = this.animRenderOffset.yPos + (this.h - this.img.height);
     this.finalRenderOffset.w = this.animRenderOffset.w;
     this.finalRenderOffset.h = this.animRenderOffset.h;
   }
   
-  render(ctx){
-    if(this.img == null) {
-      //fallback
-      console.log("player sprite is null");
-      ctx.fillStyle = "black";
-      ctx.fillRect(
-        this.alphaX + this.game.camera.cameraOffsetX,
-        this.alphaY,
-        this.w,
-        this.h);
-        return;
-    }
-    this.updateRenderOffset();
-    //imgsprite
-    if(this.facingRight){
+  render(ctx) {
+  if (this.img == null) {
+    // fallback
+    console.log("player sprite is null");
+    ctx.fillStyle = "black";
+    ctx.fillRect(
+      this.alphaX + this.game.camera.cameraOffsetX,
+      this.alphaY,
+      this.w,
+      this.h
+    );
+    return;
+  }
+  
+  this.updateRenderOffset();
+  
+  const renderX = this.alphaX + this.game.camera.cameraOffsetX + this.finalRenderOffset.xPos;
+  const renderY = this.alphaY + this.finalRenderOffset.yPos;
+  const renderW = this.img.width * this.imgScalingFactor + this.finalRenderOffset.w;
+  const renderH = this.img.height * this.imgScalingFactor + this.finalRenderOffset.h;
+  
+  if (this.facingRight) {
+    // Normal draw
+    ctx.drawImage(this.img, renderX, renderY, renderW, renderH);
+  } else {
+    // Flip horizontally
+    ctx.save();
+    ctx.translate(renderX + renderW/2, 0);
+    ctx.scale(-1, 1);
     ctx.drawImage(
       this.img,
-      this.alphaX + this.game.camera.cameraOffsetX + this.finalRenderOffset.xPos,
-      this.alphaY + this.finalRenderOffset.yPos,
-      this.img.width*this.imgScalingFactor + this.finalRenderOffset.w,
-      this.img.height*this.imgScalingFactor + this.finalRenderOffset.h
+      -renderW/2 + 18, // 18 chai flipped offset milauna ho yeslai paxi optimise garna parxa
+      renderY,
+      renderW,
+      renderH
     );
-    //physics debug box
-    ctx.strokeStyle = "black";
-      ctx.strokeRect(
-        this.alphaX + this.game.camera.cameraOffsetX,
-        this.alphaY,
-        this.w,
-        this.h);
-    //image degug box
-    ctx.strokeStyle = "blue";
-      ctx.strokeRect(
-        this.alphaX + this.game.camera.cameraOffsetX + this.finalRenderOffset.xPos,
-      this.alphaY + this.finalRenderOffset.yPos,
-      this.img.width*this.imgScalingFactor + this.finalRenderOffset.w,
-      this.img.height*this.imgScalingFactor + this.finalRenderOffset.h);
-    }else{
-      ctx.drawImage(
-      this.img,
-      this.alphaX + this.game.camera.cameraOffsetX + this.finalRenderOffset.xPos,
-      this.alphaY + this.finalRenderOffset.yPos,
-      this.img.width*this.imgScalingFactor + this.finalRenderOffset.w,
-      this.img.height*this.imgScalingFactor + this.finalRenderOffset.h
-    );
-    }
+    ctx.restore();
   }
+  
+  ctx.strokeStyle = "green";
+  ctx.strokeRect(
+    this.alphaX + this.game.camera.cameraOffsetX,
+    this.alphaY,
+    this.w,
+    this.h
+  );
+}
 }
 
 class GameInputs{
@@ -517,7 +521,7 @@ class Game {
     this.inputs = new GameInputs();
 
     //Entity Creation
-    this.player = new Player(100, 100, 30, 30, this);
+    this.player = new Player(100, 100, 20, 28, this);
     //camera object
     this.camera = new Camera(this.player.xPos,this.player.yPos,10,10,this.player,this);
     
@@ -580,9 +584,11 @@ class Game {
     const playerGlideFrames = await this.loader.loadImagesFromFolder("./assets/player/glide/",4);
     
     this.playerIdle = new Animation(playerIdleFrames,5,true);
-    this.playerIdle.renderOffset.setOffsets(-8,0,0,0);
+    this.playerIdle.renderOffset.setOffsets(-4,-8,0,0);
     this.playerJump = new Animation(playerJumpFrames,10,false);
+    this.playerJump.renderOffset.setOffsets(0,-1,0,0);
     this.playerGlide = new Animation(playerGlideFrames,4,true);
+    this.playerGlide.renderOffset.setOffsets(0,-10,0,0);
   }
   
   update(dt){

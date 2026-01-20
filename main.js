@@ -224,12 +224,124 @@ class Camera extends Rect {
   }
 }
 
+const EnemyAnimState = {
+  IDLE: "IDLE"
+}
+
+class Enemy extends PhysicsRect{
+  constructor(x,y,w,h, game){
+    super(x,y,w,h);
+    this.velocityX = 0.0;
+    this.velocityY = 0.0;
+    this.direction = 1;
+    this.game = game;
+    
+    //Interpolated Position
+    this.alphaX = this.xPos;
+    this.alphaY = this.yPos;
+    
+    //flags
+    this.onAir = true;
+    this.facingRight = true;
+    
+    //Animation dependecies
+    this.currAnimState = EnemyAnimState.IDLE;
+    this.nextAnimState;
+    this.animPlayerRegistry = {
+      "IDLE": new AnimationPlayer(this.game.enemyIdle)
+    };
+    this.currAnimPlayer = this.animPlayerRegistry[this.currAnimState];
+    
+    //render dependencies
+    this.imgScalingFactor = 1;
+    this.finalRenderOffset = new RenderOffset(0, 0, 0, 0);
+    this.animRenderOffset = new RenderOffset(0, 0, 0, 0);
+  }
+  update(dt) {
+    this.prevX = this.xPos;
+    this.prevY = this.yPos;
+  }
+  updateInterpolation(ipf) {
+    this.alphaX = this.prevX + ((this.xPos - this.prevX) * ipf);
+    this.alphaY = this.prevY + ((this.yPos - this.prevY) * ipf);
+  }
+  updateAnimation(deltaTime) {
+    //updating anim render offset
+    
+  
+  if (this.nextAnimState != this.currAnimState) {
+    this.currAnimState = this.nextAnimState;
+    this.currAnimPlayer = this.animPlayerRegistry[this.currAnimState];
+    this.currAnimPlayer.reset();
+  }
+  
+    this.animRenderOffset = this.currAnimPlayer.animation.renderOffset;
+  
+    this.img = this.currAnimPlayer.getCurrentFrame(deltaTime);
+  }
+
+updateRenderOffset() {
+  
+  this.finalRenderOffset.xPos = this.animRenderOffset.xPos + (this.w - (this.img.width * this.imgScalingFactor) / 2.0);
+  this.finalRenderOffset.yPos = this.animRenderOffset.yPos + (this.h - this.img.height);
+  this.finalRenderOffset.w = this.animRenderOffset.w;
+  this.finalRenderOffset.h = this.animRenderOffset.h;
+}
+
+render(ctx) {
+  if (this.img == null) {
+    // fallback
+    console.log("enemy sprite is null");
+    ctx.fillStyle = "black";
+    ctx.fillRect(
+      this.alphaX + this.game.camera.cameraOffsetX,
+      this.alphaY,
+      this.w,
+      this.h
+    );
+    return;
+  }
+  
+  this.updateRenderOffset();
+  
+  const renderX = this.alphaX + this.game.camera.cameraOffsetX + this.finalRenderOffset.xPos;
+  const renderY = this.alphaY + this.finalRenderOffset.yPos;
+  const renderW = this.img.width * this.imgScalingFactor + this.finalRenderOffset.w;
+  const renderH = this.img.height * this.imgScalingFactor + this.finalRenderOffset.h;
+  
+  if (this.facingRight) {
+    // Normal draw
+    ctx.drawImage(this.img, renderX, renderY, renderW, renderH);
+  } else {
+    // Flip horizontally
+    ctx.save();
+    ctx.translate(renderX + renderW / 2, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(
+      this.img,
+      -renderW / 2 + 18, // 18 chai flipped offset milauna ho yeslai paxi optimise garna parxa
+      renderY,
+      renderW,
+      renderH
+    );
+    ctx.restore();
+  }
+  
+  ctx.strokeStyle = "red";
+  ctx.strokeRect(
+    this.alphaX + this.game.camera.cameraOffsetX,
+    this.alphaY,
+    this.w,
+    this.h
+  );
+}
+}
+
 const PlayerAnimState = {
   IDLE: "IDLE",
   GLIDE: "GLIDE",
   JUMP: "JUMP"
 }
-
 class Player extends PhysicsRect {
   constructor(x,y,w,h, game){
     super(x,y,w,h);
@@ -577,18 +689,21 @@ class Game {
     this.layer1 = await this.loader.loadImage("./assets/background/1.png");
     this.layer0 = await this.loader.loadImage("./assets/background/0.png");
     
-    //Animation Objects
-    //Player Animations
+    //Player Animations frames
     const playerIdleFrames = await this.loader.loadImagesFromFolder("./assets/player/idleFx/", 5);
     const playerJumpFrames = await this.loader.loadImagesFromFolder("./assets/player/jump/",4);
     const playerGlideFrames = await this.loader.loadImagesFromFolder("./assets/player/glide/",4);
-    
+    const playerAttack1Frames = await this.loader.loadImagesFromFolder("./assets/player/attack1Fx/",6);
+    //Animation Objects
+
     this.playerIdle = new Animation(playerIdleFrames,5,true);
     this.playerIdle.renderOffset.setOffsets(-4,-8,0,0);
     this.playerJump = new Animation(playerJumpFrames,10,false);
     this.playerJump.renderOffset.setOffsets(0,-1,0,0);
     this.playerGlide = new Animation(playerGlideFrames,4,true);
     this.playerGlide.renderOffset.setOffsets(0,-10,0,0);
+    this.playerAttack1 = new Animation(playerAttack1Frames, 6, false);
+    
   }
   
   update(dt){

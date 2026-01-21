@@ -225,7 +225,8 @@ class Camera extends Rect {
 }
 
 const EnemyAnimState = {
-  IDLE: "IDLE"
+  IDLE: "IDLE",
+  ATTACK: "ATTACK"
 }
 
 class Enemy extends PhysicsRect{
@@ -248,7 +249,8 @@ class Enemy extends PhysicsRect{
     this.currAnimState = EnemyAnimState.IDLE;
     this.nextAnimState = this.currAnimState;
     this.animPlayerRegistry = {
-      "IDLE": new AnimationPlayer(this.game.enemyIdle)
+      "IDLE": new AnimationPlayer(this.game.enemyIdle),
+      "ATTACK": new AnimationPlayer(this.game.enemyAttack)
     };
     this.currAnimPlayer = this.animPlayerRegistry[this.currAnimState];
     
@@ -425,7 +427,11 @@ class Player extends PhysicsRect {
   //X direction handel
   
   if(this.isGliding){
-    this.velocityX = this.maxGlideVelocity;
+    if(this.facingRight) {
+      this.velocityX = this.maxGlideVelocity;
+    }else{
+      this.velocityX = - this.maxGlideVelocity;
+    }
   }
   
   this.xPos += this.velocityX *this.direction * dt;
@@ -461,7 +467,7 @@ class Player extends PhysicsRect {
   this.velocityY = Math.min(this.velocityY + (this.game.ACCLN_DUE_GRAVITY * this.fallFactor *this.gravityFactor*dt), this.game.BASE_TERMINAL_VELOCITY);
   
   if(this.isGliding){
-    this.velocityY = Math.min(this.velocityY, this.maxGlideFallVelocity);
+      this.velocityY = Math.min(this.velocityY, this.maxGlideFallVelocity);
   }
   
   dy = this.velocityY * dt/2.0;
@@ -697,6 +703,7 @@ class Game {
     const playerAttack1Frames = await this.loader.loadImagesFromFolder("./assets/player/attack1Fx/",6);
     //Enemy Animation frames
     const enemyIdleFrames = await this.loader.loadImagesFromFolder("./assets/enemy/idleRight/",4);
+    const enemyAttackFrames = await this.loader.loadImagesFromFolder("./assets/enemy/attackRight/",6);
     //Animation Objects
 
     this.playerIdle = new Animation(playerIdleFrames,5,true);
@@ -709,6 +716,8 @@ class Game {
     
     this.enemyIdle = new Animation(enemyIdleFrames,5,true);
     this.enemyIdle.renderOffset.setOffsets(-9,-20,0,0);
+    this.enemyAttack = new Animation(enemyAttackFrames,6,true);
+    this.enemyAttack.renderOffset.setOffsets(-9,-20,0,0);
   }
   
   update(dt){

@@ -1,3 +1,41 @@
-body {
-    font-size: 15pt;
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #222;
+  overflow: hidden;
+  touch-action: none;
+}
+
+/* Game canvas */
+canvas {
+  display: block;
+  border: 2px solid white;
+  image-rendering: pixelated;
+}
+
+/* ATTACK button */
+#attackBtn {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+
+  background: rgba(200, 50, 50, 0.85);
+  color: white;
+
+  font-size: 14px;
+  font-weight: bold;
+
+  border: none;
+  outline: none;
+
+  user-select: none;
+  touch-action: none;
+}
+
+#attackBtn:active {
+  background: rgba(255, 80, 80, 0.95);
 }

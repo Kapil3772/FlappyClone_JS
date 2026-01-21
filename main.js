@@ -111,7 +111,7 @@ class Layer{
     ctx.drawImage(
       this.img,
       this.wrapX - this.w + this.renderOffset.xPos,
-    0 + (game.camera.cameraOffsetY * this.depthFactorY) + this.renderOffset.yPos,
+    0 + (this.game.camera.cameraOffsetY * this.depthFactorY) + this.renderOffset.yPos,
     this.w + this.renderOffset.w,
     this.h + this.renderOffset.h);
     
@@ -123,7 +123,7 @@ class Layer{
     ctx.drawImage(
       this.img,
       this.wrapX - this.w -1 + this.renderOffset.xPos,
-      0 + (game.camera.cameraOffsetY * this.depthFactorY) + this.renderOffset.yPos,
+      0 + (this.game.camera.cameraOffsetY * this.depthFactorY) + this.renderOffset.yPos,
       this.w + this.renderOffset.w,
       this.h + this.renderOffset.h);
   }
@@ -424,7 +424,7 @@ class Player extends PhysicsRect {
     
   //X direction handel
   
-  if(this.gliding){
+  if(this.isGliding){
     this.velocityX = this.maxGlideVelocity;
   }
   
@@ -435,7 +435,7 @@ class Player extends PhysicsRect {
     if(!this.game.inputs.leftJumpHandeled){
       this.game.inputs.leftJumpHandeled = true;
     }
-    if(!this.game.rightJumpHandeled){
+    if(!this.game.inputs.rightJumpHandeled){
       this.game.inputs.rightJumpHandeled = true;
     }
     this.jump();
@@ -656,7 +656,6 @@ class Game {
         //update and render paused
         //Blur effect applied
         //Rotate screen message displayed
-        
       }else{
         this.updateAccumulator += this.deltaTime;
         while(this.updateAccumulator >= this.UPDATE_STEP_DURATION){
@@ -794,3 +793,6 @@ document.body.addEventListener("touchend", (e) => {
     game.inputs.rightJumpHandeled = true;
   }
 });
+document.addEventListener("touchstart", e => e.preventDefault(), { passive: false });
+document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
+document.addEventListener("touchend", e => e.preventDefault(), { passive: false });

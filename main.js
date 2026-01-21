@@ -198,14 +198,15 @@ class Camera extends Rect {
     this.cameraOffsetY = 0;
     this.targetX = this.entity.xPos;
     this.targetY = this.entity.yPos;
-    this.smoothness = 5;
+    this.smoothnessX = 2.5;
+    this.smoothnessY = 5;
   }
   update(dt){
     this.targetX = this.entity.xPos;
     this.targetY = this.entity.yPos;
-    let dx = (this.targetX - this.xPos)* this.smoothness * dt;
+    let dx = (this.targetX - this.xPos)* this.smoothnessX * dt;
     this.xPos += dx;
-    let dy = (this.targetY - this.yPos)* this.smoothness * dt;
+    let dy = (this.targetY - this.yPos)* this.smoothnessY * dt;
     this.yPos += dy;
     
     //this.xPos = this.entity.xPos;
@@ -258,6 +259,8 @@ class Enemy extends PhysicsRect{
     this.imgScalingFactor = 2.2;
     this.finalRenderOffset = new RenderOffset(0, 0, 0, 0);
     this.animRenderOffset = new RenderOffset(0, 0, 0, 0);
+    
+    //attack dependencies
   }
   update(dt) {
     this.prevX = this.xPos;
@@ -342,7 +345,8 @@ render(ctx) {
 const PlayerAnimState = {
   IDLE: "IDLE",
   GLIDE: "GLIDE",
-  JUMP: "JUMP"
+  JUMP: "JUMP",
+  ATTACK1 : "ATTACK1"
 }
 class Player extends PhysicsRect {
   constructor(x,y,w,h, game){
@@ -364,6 +368,11 @@ class Player extends PhysicsRect {
     this.jumpHandeled = false;
     this.jumpDirection = 0;
     this.isGliding = false;
+    this.isAttacking = false;
+    this.attackHandeled = true;
+    
+    //Timers
+    this.attackTimer = 0;
     
     //factors
     this.fallFactor = 2.0;
@@ -378,9 +387,23 @@ class Player extends PhysicsRect {
     this.animPlayerRegistry = {
       "IDLE" : new AnimationPlayer(this.game.playerIdle),
       "JUMP" : new AnimationPlayer(this.game.playerJump),
-      "GLIDE" : new AnimationPlayer(this.game.playerGlide)
+      "GLIDE" : new AnimationPlayer(this.game.playerGlide),
+      "ATTACK1" : new AnimationPlayer(this.game.playerAttack1)
     };
     this.currAnimPlayer = this.animPlayerRegistry[this.currAnimState];
+    
+    //Attacks Dependencies
+    this.currentHitbox = null;
+    this.playerAttackRegistry = {
+      attack1: {
+        name: "ATTACK1",
+        damage: 10,
+        hitbox: {
+          w: 65,
+          h: 28,
+        }
+      }
+    };
     
     //render dependencies
     this.imgScalingFactor = 2;
@@ -424,6 +447,39 @@ class Player extends PhysicsRect {
     
     this.fallFactor = Math.abs(this.velocityY)>70?2.0:1.0;
     
+    //Attack handel
+    if(this.game.inputs.attackPressed){
+      console.log("ok");
+      this.attackHandeled = false;
+      this.attackTimer = 1;
+    }
+    if(!this.attackHandeled){
+      //console.log("ok");
+      this.isAttacking = true;
+      this.velocityX = this.facingRight?180:-180;
+    }
+    this.attackTimer = Math.max(this.attackTimer - dt, 0);
+    console.log(this.attackTimer);
+    if(this.attackTimer == 0){
+      //attack code
+      this.isAttacking = false;
+      this.attackHandeled = true;
+      this.currentHitbox = null;
+    }
+    if(this.attackTimer > 0){
+      if(this.facingRight){
+        this.currentHitbox = new PhysicsRect(this.right(),
+        this.bottom(),
+        this.playerAttackRegistry.attack1.hitbox.w,
+        this.playerAttackRegistry.attack1.hitbox.h);
+      }else{
+        this.currentHitbox = new PhysicsRect(
+          this.left() - this.playerAttackRegistry.attack1.hitbox.w,
+          this.bottom(),
+          this.playerAttackRegistry.attack1.hitbox.w,
+          this.playerAttackRegistry.attack1.hitbox.h);
+      }
+    }
   //X direction handel
   
   if(this.isGliding){
@@ -437,7 +493,7 @@ class Player extends PhysicsRect {
   this.xPos += this.velocityX *this.direction * dt;
   
   //jump handel
-  if((this.game.inputs.leftJumpPressed && !this.game.inputs.leftJumpHandeled) && this.jumpDirection !== 0 || (this.game.inputs.rightJumpPressed && !this.game.inputs.rightJumpHandeled)){
+  if((this.game.inputs.leftJumpPressed && !this.game.inputs.leftJumpHandeled) && this.jumpDirection !== 0 || (this.game.inputs.rightJumpPressed && !this.game.inputs.rightJumpHandeled) && !this.isAttacking){
     if(!this.game.inputs.leftJumpHandeled){
       this.game.inputs.leftJumpHandeled = true;
     }
@@ -483,7 +539,9 @@ class Player extends PhysicsRect {
   
   updateAnimation(deltaTime){
     //updating anim render offset
-    if(this.isJumping){
+    if(this.isAttacking){
+    this.nextAnimState = PlayerAnimState.ATTACK1;
+    }else if(this.isJumping){
       this.nextAnimState = PlayerAnimState.JUMP;
     }else if(this.isGliding){
       this.nextAnimState = PlayerAnimState.GLIDE;
@@ -548,7 +606,7 @@ class Player extends PhysicsRect {
     );
     ctx.restore();
   }
-  
+  //physics debug box
   ctx.strokeStyle = "green";
   ctx.strokeRect(
     this.alphaX + this.game.camera.cameraOffsetX,
@@ -556,6 +614,15 @@ class Player extends PhysicsRect {
     this.w,
     this.h
   );
+  //Rendering Attack hitbox
+  if(this.currentHitbox != null){
+    ctx.fillStyle = "blue";
+    ctx.fillRect(
+      this.currentHitbox.xPos + this.game.camera.cameraOffsetX,
+      this.currentHitbox.yPos,
+      this.currentHitbox.w,
+      this.currentHitbox.h);
+  }
 }
 }
 
@@ -566,6 +633,8 @@ class GameInputs{
   rightJumpPressed = 0;
   leftJumpHandeled = true;
   rightJumpHandeled = true;
+  attackPressed = false;
+  attackHandeled = false;
 }
 class Game {
   //Game constants
@@ -712,7 +781,8 @@ class Game {
     this.playerJump.renderOffset.setOffsets(0,-1,0,0);
     this.playerGlide = new Animation(playerGlideFrames,4,true);
     this.playerGlide.renderOffset.setOffsets(0,-10,0,0);
-    this.playerAttack1 = new Animation(playerAttack1Frames, 6, false);
+    this.playerAttack1 = new Animation(playerAttack1Frames, 10, false);
+    this.playerAttack1.renderOffset.setOffsets(0,-6,0,0);
     
     this.enemyIdle = new Animation(enemyIdleFrames,5,true);
     this.enemyIdle.renderOffset.setOffsets(-9,-20,0,0);
@@ -764,6 +834,19 @@ class Game {
   }
 }
 const game = new Game();
+const atkBtn = document.getElementById("attackBtn");
+
+atkBtn.addEventListener("touchstart", (e) => {
+  if(!game.inputs.attackHandeled){
+      game.inputs.attackPressed = true;
+      game.inputs.attackHandeled = true;
+  }
+});
+atkBtn.addEventListener("touchend", (e) => {
+  game.inputs.attackPressed = false;
+  game.inputs.attackHandeled = false;
+});
+
 
 document.body.addEventListener("touchstart", (e) => {
   const screenMid = window.innerWidth / 2;
@@ -802,6 +885,7 @@ document.body.addEventListener("touchend", (e) => {
     game.inputs.rightJumpHandeled = true;
   }
 });
-document.addEventListener("touchstart", e => e.preventDefault(), { passive: false });
+/*document.addEventListener("touchstart", e => e.preventDefault(), { passive: false });
 document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
 document.addEventListener("touchend", e => e.preventDefault(), { passive: false });
+*/

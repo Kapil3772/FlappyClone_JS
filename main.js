@@ -129,7 +129,6 @@ class Layer{
   }
 }
 
-
 class Background {
   constructor(game){
     this.game = game;
@@ -199,7 +198,7 @@ class Camera extends Rect {
     this.targetX = this.entity.xPos;
     this.targetY = this.entity.yPos;
     this.smoothnessX = 2.5;
-    this.smoothnessY = 5;
+    this.smoothnessY = 3;
   }
   update(dt){
     this.targetX = this.entity.xPos;
@@ -227,7 +226,8 @@ class Camera extends Rect {
 
 const EnemyAnimState = {
   IDLE: "IDLE",
-  ATTACK: "ATTACK"
+  ATTACK: "ATTACK",
+  HURT: "HURT"
 }
 
 class Enemy extends PhysicsRect{
@@ -245,13 +245,21 @@ class Enemy extends PhysicsRect{
     //flags
     this.onAir = true;
     this.facingRight = true;
+    this.isHurt = false;
+    this.hitImmuneState = false;
+    this.hurtHandeled = false;
+    
+    //timers
+    this.baseHurtTimer = 0.3; //sec
+    this.hurtTimer = 0;
     
     //Animation dependecies
     this.currAnimState = EnemyAnimState.IDLE;
     this.nextAnimState = this.currAnimState;
     this.animPlayerRegistry = {
       "IDLE": new AnimationPlayer(this.game.enemyIdle),
-      "ATTACK": new AnimationPlayer(this.game.enemyAttack)
+      "ATTACK": new AnimationPlayer(this.game.enemyAttack),
+      "HURT": new AnimationPlayer(this.game.enemyHurt)
     };
     this.currAnimPlayer = this.animPlayerRegistry[this.currAnimState];
     
@@ -265,6 +273,17 @@ class Enemy extends PhysicsRect{
   update(dt) {
     this.prevX = this.xPos;
     this.prevY = this.yPos;
+    
+    if(this.isHurt && !this.hitImmuneState && !this.hurtHandeled){
+        this.hurtHandeled = true;
+        this.hurtTimer = this.baseHurtTimer;
+    }
+    
+    this.hurtTimer = Math.max(this.hurtTimer - dt, 0);
+    if(this.hurtTimer == 0){
+      this.isHurt = false;
+      this.hurtHandeled = false;
+    }
   }
   updateInterpolation(ipf) {
     this.alphaX = this.prevX + ((this.xPos - this.prevX) * ipf);
@@ -272,8 +291,11 @@ class Enemy extends PhysicsRect{
   }
   updateAnimation(deltaTime) {
     //updating anim render offset
-    
-  
+    if(this.isHurt){
+      this.nextAnimState = EnemyAnimState.HURT;
+    }else{
+      this.nextAnimState = EnemyAnimState.IDLE;
+    }
   if (this.nextAnimState != this.currAnimState) {
     this.currAnimState = this.nextAnimState;
     this.currAnimPlayer = this.animPlayerRegistry[this.currAnimState];
@@ -339,6 +361,14 @@ render(ctx) {
     this.w,
     this.h
   );
+  //actual pos in memory
+  ctx.fillStyle = "red";
+  ctx.fillRect(
+  this.alphaX,
+  this.alphaY,
+  this.w,
+  this.h
+  );
 }
 }
 
@@ -348,6 +378,56 @@ const PlayerAnimState = {
   JUMP: "JUMP",
   ATTACK1 : "ATTACK1"
 }
+class AttackHandler{
+  constructor(entity, dt){
+    this.attack = null;
+    this.entity = entity;
+    this.attackTimer = 0;
+    this.dt = dt;
+    this.attackHandeling = false;
+    this.attackHandeled = true;
+    this.hitbox = new PhysicsRect(0,0,0,0);
+  }
+  reset(){
+    this.attackTimer = 0;
+    this.attack = null;
+    this.attackHandeling = false;
+    this.entity.isAttacking = false;
+    this.entity.currentHitbox = null;
+  }
+  handel(atk){
+    if(this.attackHandeling) return;
+    this.attack = atk;
+    this.attackHandeling = true;
+    this.inactiveTimer = this.attack.activeFrame * this.dt;
+    this.attackTimer = this.attack.totalFrames * this.dt;
+  }
+  update(dt){
+    if(!this.attackHandeling) return;
+    if(this.attackTimer == 0){
+      this.reset();
+      return;
+    }
+    this.attackTimer = Math.max(0,this.attackTimer - dt);
+    this.inactiveTimer = Math.max(0,this.inactiveTimer - dt);
+    if(this.inactiveTimer==0){
+      this.createHitbox();
+      this.entity.dealDamage(this.hitbox);
+    }
+  }
+  createHitbox(){
+    if(this.entity.facingRight){
+        this.hitbox.xPos = this.entity.right();
+      }else{
+        this.hitbox.xPos = this.entity.left() - this.attack.hitbox.w;
+      }
+      this.hitbox.yPos = this.entity.bottom();
+      this.hitbox.w = this.attack.hitbox.w;
+      this.hitbox.h = this.attack.hitbox.h;
+      this.entity.currentHitbox = this.hitbox;
+  }
+}
+
 class Player extends PhysicsRect {
   constructor(x,y,w,h, game){
     super(x,y,w,h);
@@ -369,10 +449,9 @@ class Player extends PhysicsRect {
     this.jumpDirection = 0;
     this.isGliding = false;
     this.isAttacking = false;
-    this.attackHandeled = true;
     
     //Timers
-    this.attackTimer = 0;
+    
     
     //factors
     this.fallFactor = 2.0;
@@ -398,12 +477,15 @@ class Player extends PhysicsRect {
       attack1: {
         name: "ATTACK1",
         damage: 10,
+        totalFrames: 6,
+        activeFrame: 5,
         hitbox: {
           w: 65,
           h: 28,
         }
       }
     };
+    this.currAttackHandler = new AttackHandler(this, this.game.UPDATE_STEP_DURATION);
     
     //render dependencies
     this.imgScalingFactor = 2;
@@ -416,6 +498,13 @@ class Player extends PhysicsRect {
     this.velocityX = 180 * this.jumpDirection;
     this.jumpHandeled = false;
     this.isJumping = true;
+  }
+  
+  dealDamage(hb){
+    if(hb==null) return;
+    if(hb.intersects(this.game.enemy) && !this.game.enemy.hurtHandeled){
+      this.game.enemy.isHurt = true;
+    }
   }
   
   update(dt){
@@ -448,37 +537,13 @@ class Player extends PhysicsRect {
     this.fallFactor = Math.abs(this.velocityY)>70?2.0:1.0;
     
     //Attack handel
-    if(this.game.inputs.attackPressed){
-      console.log("ok");
-      this.attackHandeled = false;
-      this.attackTimer = 1;
-    }
-    if(!this.attackHandeled){
-      //console.log("ok");
+    if(this.game.inputs.attackPressed && !this.currAttackHandler.attackHandeling){
+      this.currAttackHandler.handel(this.playerAttackRegistry.attack1);
+      this.velocityX = this.facingRight?200:-200;
       this.isAttacking = true;
-      this.velocityX = this.facingRight?180:-180;
     }
-    this.attackTimer = Math.max(this.attackTimer - dt, 0);
-    console.log(this.attackTimer);
-    if(this.attackTimer == 0){
-      //attack code
-      this.isAttacking = false;
-      this.attackHandeled = true;
-      this.currentHitbox = null;
-    }
-    if(this.attackTimer > 0){
-      if(this.facingRight){
-        this.currentHitbox = new PhysicsRect(this.right(),
-        this.bottom(),
-        this.playerAttackRegistry.attack1.hitbox.w,
-        this.playerAttackRegistry.attack1.hitbox.h);
-      }else{
-        this.currentHitbox = new PhysicsRect(
-          this.left() - this.playerAttackRegistry.attack1.hitbox.w,
-          this.bottom(),
-          this.playerAttackRegistry.attack1.hitbox.w,
-          this.playerAttackRegistry.attack1.hitbox.h);
-      }
+    if(this.currAttackHandler.attackHandeling){
+      this.currAttackHandler.update(dt);
     }
   //X direction handel
   
@@ -575,7 +640,7 @@ class Player extends PhysicsRect {
     ctx.fillStyle = "black";
     ctx.fillRect(
       this.alphaX + this.game.camera.cameraOffsetX,
-      this.alphaY,
+      this.alphaY + this.game.camera.cameraOffsetY,
       this.w,
       this.h
     );
@@ -585,7 +650,7 @@ class Player extends PhysicsRect {
   this.updateRenderOffset();
   
   const renderX = this.alphaX + this.game.camera.cameraOffsetX + this.finalRenderOffset.xPos;
-  const renderY = this.alphaY + this.finalRenderOffset.yPos;
+  const renderY = this.alphaY + this.game.camera.cameraOffsetY + this.finalRenderOffset.yPos;
   const renderW = this.img.width * this.imgScalingFactor + this.finalRenderOffset.w;
   const renderH = this.img.height * this.imgScalingFactor + this.finalRenderOffset.h;
   
@@ -614,11 +679,20 @@ class Player extends PhysicsRect {
     this.w,
     this.h
   );
+  //Actual pos in memory
+  ctx.fillStyle = "green";
+  ctx.fillRect(
+    this.alphaX,
+    this.alphaY,
+    this.w,
+    this.h
+  );
+  
   //Rendering Attack hitbox
   if(this.currentHitbox != null){
     ctx.fillStyle = "blue";
     ctx.fillRect(
-      this.currentHitbox.xPos + this.game.camera.cameraOffsetX,
+      this.currentHitbox.xPos,
       this.currentHitbox.yPos,
       this.currentHitbox.w,
       this.currentHitbox.h);
@@ -773,6 +847,7 @@ class Game {
     //Enemy Animation frames
     const enemyIdleFrames = await this.loader.loadImagesFromFolder("./assets/enemy/idleRight/",4);
     const enemyAttackFrames = await this.loader.loadImagesFromFolder("./assets/enemy/attackRight/",6);
+    const enemyHurtFrames = await this.loader.loadImagesFromFolder("./assets/enemy/hurt/",3);
     //Animation Objects
 
     this.playerIdle = new Animation(playerIdleFrames,5,true);
@@ -788,6 +863,8 @@ class Game {
     this.enemyIdle.renderOffset.setOffsets(-9,-20,0,0);
     this.enemyAttack = new Animation(enemyAttackFrames,6,true);
     this.enemyAttack.renderOffset.setOffsets(-9,-20,0,0);
+    this.enemyHurt = new Animation(enemyHurtFrames,6,false);
+    this.enemyHurt.renderOffset.setOffsets(-9,-24,0,0);
   }
   
   update(dt){

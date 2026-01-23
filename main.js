@@ -158,10 +158,12 @@ class AnimationPlayer {
     this.animationTime = 0.0;
     this.currentFrame = 0;
     this.totalFramesElapsed = 1;
+    this.totalElapsedTime = 0;
   }
   
   getCurrentFrame(dt) {
     this.animationTime += dt;
+    this.totalElapsedTime += dt;
 
     if (this.animationTime >= this.animation.framesDuration) {
         this.currentFrame++;
@@ -185,6 +187,7 @@ class AnimationPlayer {
     this.currentFrame = 0;
     this.isDone = false;
     this.totalFramesElapsed = 1;
+    this.totalElapsedTime = 0;
   }
 }
 
@@ -221,6 +224,58 @@ class Camera extends Rect {
     ctx.fillRect(this.xPos + this.cameraOffsetX, this.yPos + this.cameraOffsetY, this.w,this.h);
     ctx.strokeStyle = "black";
     ctx.strokeRect(this.xPos + this.cameraOffsetX, this.yPos + this.cameraOffsetY, this.w,this.h);
+  }
+}
+
+class AttackHandler{
+  constructor(entity, dt){
+    this.attack = null;
+    this.entity = entity;
+    this.attackTimer = 0;
+    this.dt = dt;
+    this.attackHandeling = false;
+    this.attackHandeled = true;
+    this.hitbox = new PhysicsRect(0,0,0,0);
+  }
+  reset(){
+    this.attackTimer = 0;
+    this.inactiveTimer = 0;
+    this.attack = null;
+    this.attackHandeling = false;
+    this.entity.isAttacking = false;
+    this.entity.currentHitbox = null;
+    this.entity.speedBoostedOfAttack = false;
+  }
+  handel(atk){
+    if(this.attackHandeling) return;
+    this.attack = atk;
+    this.attackHandeling = true;
+    this.inactiveTimer = this.attack.activeTime;
+    this.attackTimer = this.attack.totalFrameTime;
+  }
+  update(dt){
+    if(!this.attackHandeling) return;
+    if(this.attackTimer == 0){
+      this.reset();
+      return;
+    }
+    this.attackTimer = Math.max(0,this.attackTimer - this.entity.game.deltaTime);
+    this.inactiveTimer = Math.max(0,this.inactiveTimer - this.entity.game.deltaTime);
+    if(this.inactiveTimer==0){
+      this.createHitbox();
+      this.entity.dealDamage(this.hitbox);
+    }
+  }
+  createHitbox(){
+    if(this.entity.facingRight){
+        this.hitbox.xPos = this.entity.right() - this.attack.hitbox.xOffset;
+      }else{
+        this.hitbox.xPos = this.entity.left() - this.attack.hitbox.w + this.attack.hitbox.xOffset;
+      }
+      this.hitbox.yPos = this.entity.bottom();
+      this.hitbox.w = this.attack.hitbox.w;
+      this.hitbox.h = this.attack.hitbox.h;
+      this.entity.currentHitbox = this.hitbox;
   }
 }
 
@@ -362,6 +417,7 @@ render(ctx) {
     this.h
   );
   //actual pos in memory
+  /*
   ctx.fillStyle = "red";
   ctx.fillRect(
   this.alphaX,
@@ -369,6 +425,7 @@ render(ctx) {
   this.w,
   this.h
   );
+  */
 }
 }
 
@@ -377,55 +434,6 @@ const PlayerAnimState = {
   GLIDE: "GLIDE",
   JUMP: "JUMP",
   ATTACK1 : "ATTACK1"
-}
-class AttackHandler{
-  constructor(entity, dt){
-    this.attack = null;
-    this.entity = entity;
-    this.attackTimer = 0;
-    this.dt = dt;
-    this.attackHandeling = false;
-    this.attackHandeled = true;
-    this.hitbox = new PhysicsRect(0,0,0,0);
-  }
-  reset(){
-    this.attackTimer = 0;
-    this.attack = null;
-    this.attackHandeling = false;
-    this.entity.isAttacking = false;
-    this.entity.currentHitbox = null;
-  }
-  handel(atk){
-    if(this.attackHandeling) return;
-    this.attack = atk;
-    this.attackHandeling = true;
-    this.inactiveTimer = this.attack.activeFrame * this.dt;
-    this.attackTimer = this.attack.totalFrames * this.dt;
-  }
-  update(dt){
-    if(!this.attackHandeling) return;
-    if(this.attackTimer == 0){
-      this.reset();
-      return;
-    }
-    this.attackTimer = Math.max(0,this.attackTimer - dt);
-    this.inactiveTimer = Math.max(0,this.inactiveTimer - dt);
-    if(this.inactiveTimer==0){
-      this.createHitbox();
-      this.entity.dealDamage(this.hitbox);
-    }
-  }
-  createHitbox(){
-    if(this.entity.facingRight){
-        this.hitbox.xPos = this.entity.right();
-      }else{
-        this.hitbox.xPos = this.entity.left() - this.attack.hitbox.w;
-      }
-      this.hitbox.yPos = this.entity.bottom();
-      this.hitbox.w = this.attack.hitbox.w;
-      this.hitbox.h = this.attack.hitbox.h;
-      this.entity.currentHitbox = this.hitbox;
-  }
 }
 
 class Player extends PhysicsRect {
@@ -472,16 +480,20 @@ class Player extends PhysicsRect {
     this.currAnimPlayer = this.animPlayerRegistry[this.currAnimState];
     
     //Attacks Dependencies
+    this.movementStoppingVelocity = 200;
+    this.speedBoostedOfAttack = false;
     this.currentHitbox = null;
     this.playerAttackRegistry = {
       attack1: {
         name: "ATTACK1",
         damage: 10,
-        totalFrames: 6,
-        activeFrame: 5,
+        totalFrameTime: (this.game.playerAttack1.framesCount + 4) * this.game.playerAttack1.framesDuration,
+        activeTime: 4 * this.game.playerAttack1.framesDuration,
         hitbox: {
+          xOffset: 20,
+          yOffset: 0,
           w: 65,
-          h: 28,
+          h: 30,
         }
       }
     };
@@ -502,8 +514,12 @@ class Player extends PhysicsRect {
   
   dealDamage(hb){
     if(hb==null) return;
-    if(hb.intersects(this.game.enemy) && !this.game.enemy.hurtHandeled){
-      this.game.enemy.isHurt = true;
+    for (const enemy of this.game.enemies) {
+      if (hb.intersects(enemy) && !enemy.hurtHandeled) {
+          enemy.isHurt = true;
+          this.game.applyHitStop(3);
+          this.game.applyScreenShake(10);
+      }
     }
   }
   
@@ -539,11 +555,17 @@ class Player extends PhysicsRect {
     //Attack handel
     if(this.game.inputs.attackPressed && !this.currAttackHandler.attackHandeling){
       this.currAttackHandler.handel(this.playerAttackRegistry.attack1);
-      this.velocityX = this.facingRight?200:-200;
       this.isAttacking = true;
     }
     if(this.currAttackHandler.attackHandeling){
       this.currAttackHandler.update(dt);
+      if(this.currAttackHandler.inactiveTimer > 0){
+        this.velocityX = 0;
+      }
+      if(this.currAttackHandler.inactiveTimer == 0){
+          this.velocityX = this.facingRight?330:-330;
+          this.speedBoostedOfAttack = true;
+      }
     }
   //X direction handel
   
@@ -590,7 +612,6 @@ class Player extends PhysicsRect {
   if(this.isGliding){
       this.velocityY = Math.min(this.velocityY, this.maxGlideFallVelocity);
   }
-  
   dy = this.velocityY * dt/2.0;
   
   this.yPos += dy;
@@ -675,11 +696,12 @@ class Player extends PhysicsRect {
   ctx.strokeStyle = "green";
   ctx.strokeRect(
     this.alphaX + this.game.camera.cameraOffsetX,
-    this.alphaY,
+    this.alphaY + this.game.camera.cameraOffsetY,
     this.w,
     this.h
   );
   //Actual pos in memory
+  /*
   ctx.fillStyle = "green";
   ctx.fillRect(
     this.alphaX,
@@ -687,13 +709,14 @@ class Player extends PhysicsRect {
     this.w,
     this.h
   );
+  */
   
   //Rendering Attack hitbox
   if(this.currentHitbox != null){
-    ctx.fillStyle = "blue";
-    ctx.fillRect(
-      this.currentHitbox.xPos,
-      this.currentHitbox.yPos,
+    ctx.strokeStyle = "blue";
+    ctx.strokeRect(
+      this.currentHitbox.xPos + this.game.camera.cameraOffsetX,
+      this.currentHitbox.yPos + this.game.camera.cameraOffsetY,
       this.currentHitbox.w,
       this.currentHitbox.h);
   }
@@ -786,9 +809,36 @@ class Game {
     //camera object
     this.camera = new Camera(this.player.xPos,this.player.yPos,10,10,this.player,this);
     
-    this.enemy = new Enemy(120, 100, 22,24,this);
+    this.enemies = [
+      new Enemy(120, 100, 22,24,this),
+      new Enemy(60, 100, 22,24,this)
+    ];
+    
+    //Fx effects dependencies
+    this.hitStopTimer = 0;
+    this.screenShakeStrength = 0;
+    this.screenShakeStoppingStrength = 0.4;
+    this.shakeX = 0;
+    this.shakeY = 0;
     
     this.run();
+  }
+  
+  applyHitStop(frames){
+    this.hitStopTimer = Math.max(this.hitStopTimer, frames * this.UPDATE_STEP_DURATION);
+  }
+  applyScreenShake(strength){
+    //strength is in pixels
+    this.screenShakeStrength = Math.max(this.screenShakeStrength, strength);
+  }
+  updateScreenShake(){
+    if(this.screenShakeStrength ==0) return;
+    
+    const angle = performance.now() % 360;
+    this.shakeX = this.screenShakeStrength * Math.cos(angle);
+    this.shakeY = this.screenShakeStrength * Math.sin(angle);
+    
+    this.screenShakeStrength = Math.max(0,this.screenShakeStrength - this.screenShakeStoppingStrength);
   }
   run(){
     if(!this.isRunning) return;
@@ -868,19 +918,33 @@ class Game {
   }
   
   update(dt){
-    this.player.update(dt);
-    this.camera.update(dt);
-    this.enemy.update(dt);
+    if(this.hitStopTimer > 0){
+     this.hitStopTimer = Math.max(this.hitStopTimer - dt, 0);
+    }else{
+      this.player.update(dt);
+      this.camera.update(dt);
+      for (const enemy of this.enemies)
+      {
+          enemy.update(dt);
+      }
+    }
+    //Other updates
+    this.updateScreenShake();
+    
   }
   
   updateInterpolation(ipf){
     this.player.updateInterpolation(ipf);
-    this.enemy.updateInterpolation(ipf);
+    for (const enemy of this.enemies) {
+      enemy.updateInterpolation(ipf);
+    }
   }
   
   updateAnimation(deltaTime){
     this.player.updateAnimation(deltaTime);
-    this.enemy.updateAnimation(deltaTime);
+    for (const enemy of this.enemies) {
+      enemy.updateAnimation(deltaTime);
+    }
   }
   render(ctx){
     //Clearing screen
@@ -895,7 +959,9 @@ class Game {
     );
     
     //enemy render
-    this.enemy.render(ctx);
+    for(const enemy of this.enemies){
+      enemy.render(ctx);
+    }
     
     //player render
     this.player.render(ctx);
@@ -905,7 +971,8 @@ class Game {
     this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
     this.ctx.drawImage(
       this.vCanvas,
-      0,0,this.vCanvas.width,this.vCanvas.height,
+      0,0,this.vCanvas.width + this.shakeX,
+      this.vCanvas.height + this.shakeY,
       0,0,this.vCanvas.width *2,this.vCanvas.height *2
     );
   }

@@ -236,6 +236,8 @@ class AttackHandler{
     this.attackHandeling = false;
     this.attackHandeled = true;
     this.hitbox = new PhysicsRect(0,0,0,0);
+    this.jumpCancelTimer = 0;
+    this.inactiveTimer = 0;
   }
   reset(){
     this.attackTimer = 0;
@@ -252,6 +254,7 @@ class AttackHandler{
     this.attackHandeling = true;
     this.inactiveTimer = this.attack.activeTime;
     this.attackTimer = this.attack.totalFrameTime;
+    this.jumpCancelTimer = this.attack.jumpCancelTime;
   }
   update(dt){
     if(!this.attackHandeling) return;
@@ -261,9 +264,15 @@ class AttackHandler{
     }
     this.attackTimer = Math.max(0,this.attackTimer - this.entity.game.deltaTime);
     this.inactiveTimer = Math.max(0,this.inactiveTimer - this.entity.game.deltaTime);
+    this.jumpCancelTimer = Math.max(0,this.jumpCancelTimer - this.entity.game.deltaTime);
     if(this.inactiveTimer==0){
       this.createHitbox();
       this.entity.dealDamage(this.hitbox);
+      if(!this.entity.speedBoostedOfAttack){
+        console.log("boost");
+        this.entity.speedBoostedOfAttack = true;
+         this.entity.velocityX=this.entity.facingRight?390:-390;
+      }
     }
   }
   createHitbox(){
@@ -489,6 +498,7 @@ class Player extends PhysicsRect {
         damage: 10,
         totalFrameTime: (this.game.playerAttack1.framesCount + 4) * this.game.playerAttack1.framesDuration,
         activeTime: 4 * this.game.playerAttack1.framesDuration,
+        jumpCancelTime: 8 * this.game.playerAttack1.framesDuration,
         hitbox: {
           xOffset: 20,
           yOffset: 0,
@@ -562,14 +572,6 @@ class Player extends PhysicsRect {
       if(this.currAttackHandler.inactiveTimer > 0){
         this.velocityX = 0;
       }
-      if(this.currAttackHandler.inactiveTimer == 0){
-        if(this.facingRight){
-          this.velocityX = 330;
-        }else{
-          this.velocityX = -330;
-        }
-          this.speedBoostedOfAttack = true;
-      }
     }
   //X direction handel
   if(this.isGliding){
@@ -582,9 +584,8 @@ class Player extends PhysicsRect {
   
   this.xPos += this.velocityX *this.direction * dt;
   
-  console.log(this.game.inputs.rightJumpPressed + "," + this.game.inputs.rightJumpHandeled)
   //jump handel
-  if(((this.game.inputs.rightJumpPressed && !this.game.inputs.rightJumpHandeled) || (this.game.inputs.leftJumpPressed && !this.game.inputs.leftJumpHandeled)) && !this.isAttacking){
+  if(((this.game.inputs.rightJumpPressed && !this.game.inputs.rightJumpHandeled) || (this.game.inputs.leftJumpPressed && !this.game.inputs.leftJumpHandeled)) && (this.currAttackHandler.jumpCancelTimer<=0 || !this.isAttacking)){
     if(!this.game.inputs.leftJumpHandeled){
       this.game.inputs.leftJumpHandeled = true;
     }

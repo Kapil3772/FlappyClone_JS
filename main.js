@@ -527,6 +527,8 @@ class Player extends PhysicsRect {
     for (const enemy of this.game.enemies) {
       if (hb.intersects(enemy) && !enemy.hurtHandeled) {
           enemy.isHurt = true;
+          //Adding vibrations
+          //navigator.vibrate(100);
           this.game.applyHitStop(3);
           this.game.applyScreenShake(10);
       }

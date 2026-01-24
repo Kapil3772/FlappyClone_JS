@@ -563,12 +563,15 @@ class Player extends PhysicsRect {
         this.velocityX = 0;
       }
       if(this.currAttackHandler.inactiveTimer == 0){
-          this.velocityX = this.facingRight?330:-330;
+        if(this.facingRight){
+          this.velocityX = 330;
+        }else{
+          this.velocityX = -330;
+        }
           this.speedBoostedOfAttack = true;
       }
     }
   //X direction handel
-  
   if(this.isGliding){
     if(this.facingRight) {
       this.velocityX = this.maxGlideVelocity;
@@ -579,8 +582,9 @@ class Player extends PhysicsRect {
   
   this.xPos += this.velocityX *this.direction * dt;
   
+  console.log(this.game.inputs.rightJumpPressed + "," + this.game.inputs.rightJumpHandeled)
   //jump handel
-  if((this.game.inputs.leftJumpPressed && !this.game.inputs.leftJumpHandeled) && this.jumpDirection !== 0 || (this.game.inputs.rightJumpPressed && !this.game.inputs.rightJumpHandeled) && !this.isAttacking){
+  if(((this.game.inputs.rightJumpPressed && !this.game.inputs.rightJumpHandeled) || (this.game.inputs.leftJumpPressed && !this.game.inputs.leftJumpHandeled)) && !this.isAttacking){
     if(!this.game.inputs.leftJumpHandeled){
       this.game.inputs.leftJumpHandeled = true;
     }
@@ -1000,7 +1004,7 @@ document.body.addEventListener("touchstart", (e) => {
 
     game.inputs.jumpPressed = true;
     game.inputs.jumpReleased = false;
-
+    
     if (touchX < screenMid) {
       game.inputs.leftJumpPressed = 1;
       game.inputs.leftJumpHandeled = false;

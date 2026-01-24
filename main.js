@@ -596,7 +596,7 @@ class Player extends PhysicsRect {
   }
   
   //Y direction handel
-  if(this.onAir && this.game.inputs.jumpPressed && this.velocityY > 0){
+  if((this.onAir && this.game.inputs.jumpPressed && this.velocityY > 0) && !this.isAttacking){
     this.isGliding = true;
   }else{
     this.isGliding = false;

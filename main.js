@@ -141,6 +141,88 @@ class Background {
   }
 }
 
+
+class MapLoader {
+  async loadJsonMapData(path) {
+    const res = await fetch(path);
+    if(!res.ok){
+      throw new Error("Failed to load map data from ${path}");
+    }
+    return await res.json();
+  }
+}
+
+class TileVariantRegistry{
+  constructor(game){
+    this.game = game;
+    this.tileVariantRegistry = new Map();
+  }
+  async register(type, path, count){
+  for (let i = 1; i <= count; i++) {
+    try {
+      const img = await this.game.loader.loadImage(path + i + ".png");
+      this.tileVariantRegistry.set(type + i, img);
+      console.log("registered");
+    } catch {
+      console.log("Cannot load:", path + i + ".png");
+    }
+  }
+}
+  
+  getImg(type, variant) {
+    const key = type + variant;
+    const img = this.tileVariantRegistry.get(key);
+
+    if (!img) {
+      throw new Error(`Missing tile variant: ${key}`);
+    }
+    return img;
+  }
+}
+
+class OnGridTile extends PhysicsRect{
+  constructor(x,y,w,h,imgRef){
+    super(x*w,y*h,w,h);
+    this.img = imgRef;
+    this.gridX = x;
+    this.gridY = y;
+  }
+}
+
+class TileMap{
+  constructor(mapData,tileVariantRegistry,game){
+    this.game = game;
+    this.onGridTiles = {};
+    this.offGridTiles = {};
+    this.tileSize = mapData.tileSize;
+    this.loadLevel(mapData,tileVariantRegistry);
+  }
+  loadLevel(mapData,tileVariantRegistry){
+    for(const tileData of mapData.tiles){
+      this.onGridTiles[tileData.gridX +";"+tileData.gridY] = new OnGridTile(
+        tileData.gridX,
+        tileData.gridY,
+        mapData.tileSize,
+        mapData.tileSize,
+        tileVariantRegistry.getImg(tileData.type,tileData.variant)
+      );
+    }
+  }
+  render(ctx){
+    for(const key in this.onGridTiles){
+      const tile = this.onGridTiles[key];
+      if(tile.img instanceof HTMLImageElement){
+        //ctx.drawImage(tile.img,tile.xPos + this.game.camera.cameraOffsetX,tile.yPos + this.game.camera.cameraOffsetY,tile.w,tile.h);
+      ctx.fillStyle="red";
+      ctx.fillRect(tile.xPos + this.game.camera.cameraOffsetX,tile.yPos + this.game.camera.cameraOffsetY,tile.w,tile.h);
+      }else{
+        throw new Error("Tile.img is not instance of HTMLImageElement");
+      }
+      
+    }
+  }
+}
+
 class Animation{
   constructor(frames,animFrequency,looping){
     this.framesCount = frames.length;
@@ -269,7 +351,6 @@ class AttackHandler{
       this.createHitbox();
       this.entity.dealDamage(this.hitbox);
       if(!this.entity.speedBoostedOfAttack){
-        console.log("boost");
         this.entity.speedBoostedOfAttack = true;
          this.entity.velocityX=this.entity.facingRight?390:-390;
       }
@@ -292,6 +373,32 @@ const EnemyAnimState = {
   IDLE: "IDLE",
   ATTACK: "ATTACK",
   HURT: "HURT"
+}
+
+class PhysicsRectAround {
+  constructor(entity,tileMap){
+    this.physicsTiles = [];
+    this.entity = entity;
+    this.tileMap = tileMap
+    this.widthOffset = Math.ceil(entity.w / entity.game.mapData.tileSize);
+    this.heightOffset = Math.ceil(entity.h / entity.game.mapData.tileSize);
+    this.update();
+  }
+  update(){
+    this.physicsTiles = [];
+    const left = Math.floor(this.entity.left() / this.entity.game.mapData.tileSize);
+    const right = Math.ceil(this.entity.right() / this.entity.game.mapData.tileSize);
+    const top = Math.floor(this.entity.top() / this.entity.game.mapData.tileSize);
+    const bottom = Math.ceil(this.entity.bottom() / this.entity.game.mapData.tileSize);
+    for(let i = top - this.heightOffset; i<= bottom + this.heightOffset; i++){
+      for(let j = left - this.widthOffset; j<=right + this.widthOffset; j++){
+        const tile = this.tileMap.onGridTiles[`${j};${i}`];
+        if(tile != null){
+          this.physicsTiles.push(tile);
+        }
+      }
+    }
+  }
 }
 
 class Enemy extends PhysicsRect{
@@ -456,6 +563,7 @@ class Player extends PhysicsRect {
     //Interpolated Position
     this.alphaX = this.xPos;
     this.alphaY = this.yPos;
+    this.physicsRectAround = new PhysicsRectAround(this,this.game.tileMap);
     
     //Flags
     this.onAir = true;
@@ -514,7 +622,10 @@ class Player extends PhysicsRect {
     this.finalRenderOffset = new RenderOffset(0,0,0,0);
     this.animRenderOffset = new RenderOffset(0,0,0,0);
   }
-  
+  updateGridPos(){
+    this.gridX = Math.floor(this.xPos / this.game.mapData.tileSize);
+    this.gridY = Math.floor(this.yPos / this.game.mapData.tileSize);
+  }
   jump(){
     this.velocityY = -140;
     this.velocityX = 180 * this.jumpDirection;
@@ -528,7 +639,7 @@ class Player extends PhysicsRect {
       if (hb.intersects(enemy) && !enemy.hurtHandeled) {
           enemy.isHurt = true;
           //Adding vibrations
-          //navigator.vibrate(100);
+          navigator.vibrate(100);
           this.game.applyHitStop(3);
           this.game.applyScreenShake(10);
       }
@@ -585,7 +696,8 @@ class Player extends PhysicsRect {
   }
   
   this.xPos += this.velocityX *this.direction * dt;
-  
+  this.resolveXCollision();
+
   //jump handel
   if(((this.game.inputs.rightJumpPressed && !this.game.inputs.rightJumpHandeled) || (this.game.inputs.leftJumpPressed && !this.game.inputs.leftJumpHandeled)) && (this.currAttackHandler.jumpCancelTimer<=0 || !this.isAttacking)){
     if(!this.game.inputs.leftJumpHandeled){
@@ -612,7 +724,8 @@ class Player extends PhysicsRect {
   //half dt handel
   let dy = this.velocityY * this.gravityFactor * dt/2.0;
   this.yPos += dy;
-  
+  this.resolveYCollision();
+
   //other half dt handel
   this.velocityY = Math.min(this.velocityY + (this.game.ACCLN_DUE_GRAVITY * this.fallFactor *this.gravityFactor*dt), this.game.BASE_TERMINAL_VELOCITY);
   
@@ -623,11 +736,41 @@ class Player extends PhysicsRect {
   
   this.yPos += dy;
   
+  this.updateGridPos();
+  this.physicsRectAround.update();
+  this.resolveYCollision();
   }
   
   updateInterpolation(ipf){
     this.alphaX = this.prevX + ((this.xPos - this.prevX) * ipf);
     this.alphaY = this.prevY + ((this.yPos - this.prevY) * ipf);
+  }
+  
+  resolveXCollision(){
+    for(const tile of this.physicsRectAround.physicsTiles){
+      if(this.intersects(tile)){
+        if(this.velocityX > 0){
+          this.xPos = tile.left() - this.w;
+          this.velocityX = this.velocityX * 0.2;
+        }else if(this.velocityX < 0){
+          this.xPos = tile.right();
+          this.velocityX = this.velocityX * 0.2;
+        }
+      }
+    }
+  }
+  
+  resolveYCollision(){
+    for(const tile of this.physicsRectAround.physicsTiles){
+      if(this.intersects(tile)){
+        if(this.velocityY > 0){
+          this.yPos = tile.top() - this.h;
+         this.velocityY = 0;
+        }else if(this.velocityY < 0){
+          this.yPos = tile.bottom();
+        }
+      }
+    }
   }
   
   updateAnimation(deltaTime){
@@ -672,7 +815,6 @@ class Player extends PhysicsRect {
       this.w,
       this.h
     );
-    return;
   }
   
   this.updateRenderOffset();
@@ -727,6 +869,12 @@ class Player extends PhysicsRect {
       this.currentHitbox.w,
       this.currentHitbox.h);
   }
+  ctx.fillStyle = "black";
+    for(const tile of this.physicsRectAround.physicsTiles){
+      ctx.fillRect(tile.xPos + this.game.camera.cameraOffsetX
+      ,tile.yPos + this.game.camera.cameraOffsetY
+      ,tile.w,tile.h);
+    }
 }
 }
 
@@ -781,7 +929,7 @@ class Game {
     this.vCtx = this.vCanvas.getContext("2d");
     this.vCtx.imageSmoothingEnabled = false;
     window.addEventListener("resize", () => this.resize());
-
+    
     //Asset loadings
     this.init();
   }
@@ -810,9 +958,11 @@ class Game {
     ];
     this.background.layers[0].renderOffset.setOffsets(0,-30,0,30);
     this.inputs = new GameInputs();
-
+    
+    this.tileMap = new TileMap(this.mapData, this.tileVariantRegistry, this);
+    console.log(this.tileMap.onGridTiles);
     //Entity Creation
-    this.player = new Player(100, 100, 20, 28, this);
+    this.player = new Player(96, 96, 20, 28, this);
     //camera object
     this.camera = new Camera(this.player.xPos,this.player.yPos,10,10,this.player,this);
     
@@ -859,9 +1009,7 @@ class Game {
       
       
       if(this.gamePaused){
-        //update and render paused
-        //Blur effect applied
-        //Rotate screen message displayed
+        //okay
       }else{
         this.updateAccumulator += this.deltaTime;
         while(this.updateAccumulator >= this.UPDATE_STEP_DURATION){
@@ -890,11 +1038,17 @@ class Game {
   
   async loadAll(){
     this.loader = new GameImage();
+    this.mapLoader = new MapLoader();
     this.layer4 = await this.loader.loadImage("./assets/background/4.png");
     this.layer3 = await this.loader.loadImage("./assets/background/3.png");
     this.layer2 = await this.loader.loadImage("./assets/background/2.png");
     this.layer1 = await this.loader.loadImage("./assets/background/1.png");
     this.layer0 = await this.loader.loadImage("./assets/background/0.png");
+    
+    this.tileVariantRegistry = new TileVariantRegistry(this);
+    this.mapData = await this.mapLoader.loadJsonMapData("./assets/maps/testMap.json");
+    
+    await this.tileVariantRegistry.register("grass","./assets/tiles/grass/",41);
     
     //Player Animations frames
     const playerIdleFrames = await this.loader.loadImagesFromFolder("./assets/player/idleFx/", 5);
@@ -922,6 +1076,7 @@ class Game {
     this.enemyAttack.renderOffset.setOffsets(-9,-20,0,0);
     this.enemyHurt = new Animation(enemyHurtFrames,6,false);
     this.enemyHurt.renderOffset.setOffsets(-9,-24,0,0);
+    
   }
   
   update(dt){
@@ -958,12 +1113,9 @@ class Game {
     ctx.clearRect(0,0,this.vCanvas.width,this.vCanvas.height);
     
     this.background.render(ctx);
+
+    this.tileMap.render(ctx);
     
-    ctx.fillRect(
-      this.vCanvas.width / 2 - 2,
-      this.vCanvas.height / 2 - 2,
-      4, 4
-    );
     
     //enemy render
     for(const enemy of this.enemies){
@@ -983,6 +1135,7 @@ class Game {
       0,0,this.vCanvas.width *2,this.vCanvas.height *2
     );
   }
+  
 }
 const game = new Game();
 const atkBtn = document.getElementById("attackBtn");
@@ -1036,7 +1189,6 @@ document.body.addEventListener("touchend", (e) => {
     game.inputs.rightJumpHandeled = true;
   }
 });
-/*document.addEventListener("touchstart", e => e.preventDefault(), { passive: false });
+document.addEventListener("touchstart", e => e.preventDefault(), { passive: false });
 document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
 document.addEventListener("touchend", e => e.preventDefault(), { passive: false });
-*/

@@ -1,33 +1,33 @@
 {
-  "tileSize": 16,
+  "tileSize": 32,
   "tiles": [
     {
       "type": "grass",
-      "variant": 5,
+      "variant": 7,
       "gridX": 11,
       "gridY": 5
     },
     {
       "type": "grass",
-      "variant": 5,
+      "variant": 6,
       "gridX": 11,
       "gridY": 3
     },
     {
       "type": "grass",
-      "variant": 5,
+      "variant": 6,
       "gridX": 11,
       "gridY": 1
     },
     {
       "type": "grass",
-      "variant": 5,
+      "variant": 6,
       "gridX": 11,
       "gridY": -1
     },
     {
       "type": "grass",
-      "variant": 5,
+      "variant": 1,
       "gridX": 11,
       "gridY": -3
     },

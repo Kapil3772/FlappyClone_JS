@@ -8,6 +8,16 @@ body {
   justify-content: center;
   flex-flow: column;
 }
+
+@font-face {
+  font-family: "2P-pixel";
+  src: url("./assets/fonts/PressStart2P-Regular.ttf");
+}
+@font-face {
+  font-family: "Tiny5-pixel";
+  src: url("./assets/fonts/PressStart2P-Regular.ttf");
+}
+
 /* Game canvas */
 canvas {
   border: 2px solid white;

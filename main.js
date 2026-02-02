@@ -141,7 +141,6 @@ class Background {
   }
 }
 
-
 class MapLoader {
   async loadJsonMapData(path) {
     const res = await fetch(path);
@@ -297,7 +296,7 @@ class Camera extends Rect {
     //this.yPos = this.entity.yPos;
     
     //calculating camera offset
-    this.cameraOffsetX = (this.game.vCanvas.width / 8.0) - this.xPos;
+    this.cameraOffsetX = (this.game.vCanvas.width / 4.0) - this.xPos;
     this.cameraOffsetY = (this.game.vCanvas.height / 2.0) - this.yPos;
   }
   render(ctx){
@@ -401,6 +400,51 @@ class PhysicsRectAround {
   }
 }
 
+class EnemyAttackHandeler {
+  constructor(entity){
+    this.entity = entity;
+    this.attack = null;
+    this.attackTimer = null;
+    this.attackHandeling = false;
+    this.inactiveTimer = null;
+    this.hitox = new PhysicsRect(0,0,0,0);
+  }
+  reset(){
+    this.attackTimer = 0;
+    this.inactiveTimer = 0;
+    this.attackHandeling = false;
+    this.entity.currentHitbox = null;
+  }
+  handel(atk){
+    if(this.attackHandeling) return;
+    
+    this.attack = atk;
+    this.attackHandeling = true;
+    this.attackTimer = this.atk.totalFramesTime;
+    this.inactiveTimer = this.atk.activeTime;
+  }
+  update(dt){
+    if(!this.attackHandeling) return;
+    
+    this.attackTimer = Math.max(0,this.attackTimer - this.entity.game.deltaTime);
+    this.inactiveTimer = Math.max(0,this.inactiveTimer - this.entity.game.deltaTime);
+    if(this.inactiveTimer == 0){
+      this.createHitbox();
+    }
+  }
+  createHitbox(){
+    if(this.entity.facingRight){
+        this.hitbox.xPos = this.entity.right() - this.attack.hitbox.xOffset;
+      }else{
+        this.hitbox.xPos = this.entity.left() - this.attack.hitbox.w + this.attack.hitbox.xOffset;
+      }
+      this.hitbox.yPos = this.entity.bottom();
+      this.hitbox.w = this.attack.hitbox.w;
+      this.hitbox.h = this.attack.hitbox.h;
+      this.entity.currentHitbox = this.hitbox;
+  }
+}
+
 class Enemy extends PhysicsRect{
   constructor(x,y,w,h, game){
     super(x,y,w,h);
@@ -440,6 +484,35 @@ class Enemy extends PhysicsRect{
     this.animRenderOffset = new RenderOffset(0, 0, 0, 0);
     
     //attack dependencies
+    this.atkThreshHoldTimer = 2; // secs
+    this.smoothness = 0.7;
+    this.fovRect = new PhysicsRect(this.centerX(),this.centerY(),500,500);
+    this.attackRegistry = {
+      basicAttack : {
+        damage : 10,
+        totalFramesTime : 0,
+        activeTime: 0,
+        hitbox : {
+          xOffset: 0,
+          yOffset: 0,
+          w: 10,
+          h: 10
+        }
+      }
+    };
+    this.currentHitbox = null;
+    this.attackHandeler = new EnemyAttackHandeler(this);
+  }
+  takeKnockback(strength){
+    this.velocityX = strength;
+    this.velocityY = strength;
+  }
+  isHostileDetected(){
+    if(this.fovRect.intersects(this.game.player)){
+      return true;
+    }else{
+      return false;
+    }
   }
   update(dt) {
     this.prevX = this.xPos;
@@ -455,6 +528,25 @@ class Enemy extends PhysicsRect{
       this.isHurt = false;
       this.hurtHandeled = false;
     }
+    
+    this.fovRect.xPos = this.centerX() - this.fovRect.w / 2;
+    this.fovRect.yPos = this.centerY() - this.fovRect.h/2;
+    
+    if(this.isHostileDetected()){
+      this.atkThreshHoldTimer -= dt;
+      const targetX = this.game.player.centerX();
+      const targetY = this.game.player.centerY();
+      let dx = (this.centerX() - targetX) * this.smoothness * dt;
+      let dy = (this.centerY() - targetY) * this.smoothness * dt;
+      this.xPos -= dx;
+      this.yPos -= dy;
+    }else{
+      this.atkThreshHoldTimer = 2;
+    }
+    if(this.atkThreshHoldTimer <= 0){
+      
+    }
+    
   }
   updateInterpolation(ipf) {
     this.alphaX = this.prevX + ((this.xPos - this.prevX) * ipf);
@@ -497,7 +589,6 @@ render(ctx) {
       this.w,
       this.h
     );
-    return;
   }
   
   this.updateRenderOffset();
@@ -542,6 +633,20 @@ render(ctx) {
   this.h
   );
   */
+  ctx.strokeStyle = "red";
+  ctx.strokeRect(
+    this.fovRect.xPos + this.game.camera.cameraOffsetX,
+    this.fovRect.yPos + this.game.camera.cameraOffsetY,
+    this.fovRect.w,
+    this.fovRect.h
+  );
+  if(this.currentHitbox != null){
+      ctx.strokeRect(this.currentHitbox.xPos + this.game.camera.cameraOffsetX,
+        this.currentHitbox.yPos + this.game.camera.cameraOffsetY,
+        this.currentHitbox.w,
+        this.currentHitbox.h
+      );
+    }
 }
 }
 
@@ -642,6 +747,7 @@ class Player extends PhysicsRect {
           navigator.vibrate(100);
           this.game.applyHitStop(3);
           this.game.applyScreenShake(10);
+          enemy.takeKnockback(100);
       }
     }
   }
@@ -887,7 +993,13 @@ class GameInputs{
   rightJumpHandeled = true;
   attackPressed = false;
   attackHandeled = false;
+  updateResumed = false;
 }
+
+const LOADING_BIRD_IMG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAA3pJREFUeJztmd9LU2EYx7/rnFMISUimsAl5YTS6WdoPmNA2lxZWu7L7kCDoZoR0FxQTvJGuvAkEq930BzQwcGPuByhkOUddGHkxUbPahoih5M54uznntM1tzXrfWfR84MDGec675/m+z/u8z3kHEARBEARBEARB/IeYDtqBX6HIEgAw3decmuc6/iGuo4mF4acg3PhXBNAzlfEe+K8XoDTlHQ4n1yyQuY305+izW7Eu7eZUHFZkxrN2CcsARZaYIkv7StlR/zZEpHk1RAnAXN7Ubz3YN7SCeorAXQBFlpgWRDUbAMBAx1FoWcJG/dsIJrM1/YbdbufiK0QXwZGJLVSbzZepHZaxtEGRpZqDX19fxezsLLcMESpAMJnFqH8blWpBTs2jeW0VGUsbImPtIl2piPBtMJjMYmRia09R1L7vsZcTz0S7VIQQAUqD0EXQhXB5UwzaEtGWifHcq+mHKNzmFFmCw+EU4SYg4l3AbPUgvTTJei89gto5WHSvz3YcAPDgdiNGJrYw/fyxYSMnniEU9+mNT5EAANhuTkU28xlTgQBu3bmLnJrn4jv3Rii9NFmxQOmFzuVNIZjMIhL3oVe7F4r7AABdzQ2m+cwOb7cqIqQTdHlTCI21G8GVZkKhnQrg/rtu3OsxAwBuTH8yOj09/WOxqAg3xWC2evRegOmFr/Dq7xlmNtt11je0wvp7hsva6GMpsgRFlhhjjGXS6+zF03E2NxPdd4dZDRFLACc6rpkiY+1lu0EVQAsGjTXfdOykaWNzeY9dpdnvdrjRedZmev1mnou/3HeBnJovFKHi/h6K+9DSfMa0sbmMnJovuhRZwsDATcRiUaP4FZJYSPJ2mz9a+qLJbEO5NNeWimFb+Mxlt7so9UvTn+frsLBGSJ/Nb1/fAwCsrRZYWy3G/fTSJKAFbbfbC/d7VjrzU4EATllPC/FT+JmgIktoPNKAre87TBdg8ctaRfvdnAoAZYPX139iIcntbLAuh6KFIkB7oamF0pnvdrgBwMTzYLRup8J6R+cffwIAuOLxlLWbCgSMz6XBu11OUzgS5XoyXFcBLpzrwtzbeTYTC+Pj4oeyduXWuqjgUe//BRRZgtvlRDgSZTOxcE3PiAweB/HHSK0iaOtdaPAHhiJLuNrrLtsf6NfF811GX0AQBEEQBEEQBEEQBEEQBEEQBMGDH9PsmsA0xyrHAAAAAElFTkSuQmCC";
+
+const loadingBirdImg = new Image();
+loadingBirdImg.src = "data:image/png;base64," + LOADING_BIRD_IMG_BASE64;
 class Game {
   //Game constants
   SCREEN_WIDTH = 100;
@@ -929,9 +1041,37 @@ class Game {
     this.vCtx = this.vCanvas.getContext("2d");
     this.vCtx.imageSmoothingEnabled = false;
     window.addEventListener("resize", () => this.resize());
-    
+    this.assetReady = false;
     //Asset loadings
+    
+    this.inputs = new GameInputs();
+    
+    //Assets for loading Screen
+    //this.canvas.addEventListener("click", (e) => this.handelPlayBtn(e));
+    this.loadingBar = new Rect((this.vCanvas.width / 4) - 100,(this.vCanvas.height / 2) + 120,200,20);
+    this.progressCount = 0;
+    this.progressBar = new Rect(this.loadingBar.xPos,this.loadingBar.yPos,100,this.loadingBar.h);
+    this.runLoadingScreen(this.vCtx);
     this.init();
+  }
+  handelPlayBtn(e){
+    if (!this.playButton.visible) return;
+
+    const rect = this.canvas.getBoundingClientRect();
+    const scaleX = this.vCanvas.width / this.canvas.width;
+    const scaleY = this.vCanvas.height / this.canvas.height;
+
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    if(
+      x >= this.playButton.x &&
+      x <= this.playButton.x + this.playButton.width &&
+      y >= this.playButton.y &&
+      y <= this.playButton.y + this.playButton.height
+    ) {
+        
+    }
   }
   resize() {
     this.canvas.width = window.innerWidth - 10;
@@ -946,6 +1086,43 @@ class Game {
         this.gamePaused = true;
       }
   }
+  
+  runLoadingScreen(ctx){
+    ctx.clearRect(0,0,this.vCanvas.width,this.vCanvas.height);
+    if(!this.assetReady){
+      //Loading Screen
+      ctx.fillStyle = "#fff";
+      ctx.font = "18px Tiny5-pixel";
+      ctx.fillText(
+        "Loading...",(this.vCanvas.width / 4) - 80 ,(this.vCanvas.height/2) + 100
+      );
+      ctx.font = "20px Tiny5-pixel";
+      ctx.fillText(
+        "FLAPPY BIRD CLONE",(this.vCanvas.width / 4) - 180 ,(this.vCanvas.height/2) - 50
+      );
+      
+      this.progressBar.w = this.loadingBar.w * (this.progressCount / 4);
+      ctx.fillStyle = "lightBlue";
+      ctx.fillRect(this.progressBar.xPos,this.progressBar.yPos,this.progressBar.w,this.progressBar.h);
+      ctx.strokeStyle = "white";
+      ctx.strokeRect(this.loadingBar.xPos, this.loadingBar.yPos, this.loadingBar.w, this.loadingBar.h);
+    
+      ctx.drawImage(loadingBirdImg,
+      this.loadingBar.xPos - 40 + this.progressBar.w,this.loadingBar.yPos -33,100,100
+      )
+    }else{
+      //Tap to play Menu
+      
+    }
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.drawImage(this.vCanvas,0, 0, this.vCanvas.width, this.vCanvas.height,0, 0, this.vCanvas.width * 2, this.vCanvas.height * 2
+    );
+    if(!this.assetReady){
+      requestAnimationFrame(() => this.runLoadingScreen(this.vCtx));
+    }
+  }
+  
+  
   async init(){
     await this.loadAll();
     this.background = new Background(this);
@@ -957,8 +1134,6 @@ class Game {
       new Layer(this.layer0,0,0, 0, this)
     ];
     this.background.layers[0].renderOffset.setOffsets(0,-30,0,30);
-    this.inputs = new GameInputs();
-    
     this.tileMap = new TileMap(this.mapData, this.tileVariantRegistry, this);
     console.log(this.tileMap.onGridTiles);
     //Entity Creation
@@ -1044,17 +1219,18 @@ class Game {
     this.layer2 = await this.loader.loadImage("./assets/background/2.png");
     this.layer1 = await this.loader.loadImage("./assets/background/1.png");
     this.layer0 = await this.loader.loadImage("./assets/background/0.png");
-    
+    this.progressCount++;
     this.tileVariantRegistry = new TileVariantRegistry(this);
     this.mapData = await this.mapLoader.loadJsonMapData("./assets/maps/testMap.json");
     
     await this.tileVariantRegistry.register("grass","./assets/tiles/grass/",41);
-    
+    this.progressCount++;
     //Player Animations frames
     const playerIdleFrames = await this.loader.loadImagesFromFolder("./assets/player/idleFx/", 5);
     const playerJumpFrames = await this.loader.loadImagesFromFolder("./assets/player/jump/",4);
     const playerGlideFrames = await this.loader.loadImagesFromFolder("./assets/player/glide/",4);
     const playerAttack1Frames = await this.loader.loadImagesFromFolder("./assets/player/attack1Fx/",6);
+    this.progressCount++;
     //Enemy Animation frames
     const enemyIdleFrames = await this.loader.loadImagesFromFolder("./assets/enemy/idleRight/",4);
     const enemyAttackFrames = await this.loader.loadImagesFromFolder("./assets/enemy/attackRight/",6);
@@ -1069,7 +1245,7 @@ class Game {
     this.playerGlide.renderOffset.setOffsets(0,-10,0,0);
     this.playerAttack1 = new Animation(playerAttack1Frames, 10, false);
     this.playerAttack1.renderOffset.setOffsets(0,-6,0,0);
-    
+    this.progressCount++;
     this.enemyIdle = new Animation(enemyIdleFrames,5,true);
     this.enemyIdle.renderOffset.setOffsets(-9,-20,0,0);
     this.enemyAttack = new Animation(enemyAttackFrames,6,true);
@@ -1077,9 +1253,11 @@ class Game {
     this.enemyHurt = new Animation(enemyHurtFrames,6,false);
     this.enemyHurt.renderOffset.setOffsets(-9,-24,0,0);
     
+    this.assetReady = true;
   }
   
   update(dt){
+    if(this.inputs.updateResumed){
     if(this.hitStopTimer > 0){
      this.hitStopTimer = Math.max(this.hitStopTimer - dt, 0);
     }else{
@@ -1092,7 +1270,7 @@ class Game {
     }
     //Other updates
     this.updateScreenShake();
-    
+    }
   }
   
   updateInterpolation(ipf){
@@ -1137,6 +1315,7 @@ class Game {
   }
   
 }
+
 const game = new Game();
 const atkBtn = document.getElementById("attackBtn");
 
@@ -1153,6 +1332,9 @@ atkBtn.addEventListener("touchend", (e) => {
 
 
 document.body.addEventListener("touchstart", (e) => {
+  if(!game.inputs.updateResumed){
+    game.inputs.updateResumed = true;
+  }
   const screenMid = window.innerWidth / 2;
 
   for (let i = 0; i < e.changedTouches.length; i++) {
@@ -1189,6 +1371,7 @@ document.body.addEventListener("touchend", (e) => {
     game.inputs.rightJumpHandeled = true;
   }
 });
+
 document.addEventListener("touchstart", e => e.preventDefault(), { passive: false });
 document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
 document.addEventListener("touchend", e => e.preventDefault(), { passive: false });

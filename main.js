@@ -1040,6 +1040,7 @@ class GameInputs{
   updateResumed = false;
 }
 
+//storing img pixeldata in base64 format so the img is ready instantly
 const LOADING_BIRD_IMG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAA3pJREFUeJztmd9LU2EYx7/rnFMISUimsAl5YTS6WdoPmNA2lxZWu7L7kCDoZoR0FxQTvJGuvAkEq930BzQwcGPuByhkOUddGHkxUbPahoih5M54uznntM1tzXrfWfR84MDGec675/m+z/u8z3kHEARBEARBEARB/IeYDtqBX6HIEgAw3decmuc6/iGuo4mF4acg3PhXBNAzlfEe+K8XoDTlHQ4n1yyQuY305+izW7Eu7eZUHFZkxrN2CcsARZaYIkv7StlR/zZEpHk1RAnAXN7Ubz3YN7SCeorAXQBFlpgWRDUbAMBAx1FoWcJG/dsIJrM1/YbdbufiK0QXwZGJLVSbzZepHZaxtEGRpZqDX19fxezsLLcMESpAMJnFqH8blWpBTs2jeW0VGUsbImPtIl2piPBtMJjMYmRia09R1L7vsZcTz0S7VIQQAUqD0EXQhXB5UwzaEtGWifHcq+mHKNzmFFmCw+EU4SYg4l3AbPUgvTTJei89gto5WHSvz3YcAPDgdiNGJrYw/fyxYSMnniEU9+mNT5EAANhuTkU28xlTgQBu3bmLnJrn4jv3Rii9NFmxQOmFzuVNIZjMIhL3oVe7F4r7AABdzQ2m+cwOb7cqIqQTdHlTCI21G8GVZkKhnQrg/rtu3OsxAwBuTH8yOj09/WOxqAg3xWC2evRegOmFr/Dq7xlmNtt11je0wvp7hsva6GMpsgRFlhhjjGXS6+zF03E2NxPdd4dZDRFLACc6rpkiY+1lu0EVQAsGjTXfdOykaWNzeY9dpdnvdrjRedZmev1mnou/3HeBnJovFKHi/h6K+9DSfMa0sbmMnJovuhRZwsDATcRiUaP4FZJYSPJ2mz9a+qLJbEO5NNeWimFb+Mxlt7so9UvTn+frsLBGSJ/Nb1/fAwCsrRZYWy3G/fTSJKAFbbfbC/d7VjrzU4EATllPC/FT+JmgIktoPNKAre87TBdg8ctaRfvdnAoAZYPX139iIcntbLAuh6KFIkB7oamF0pnvdrgBwMTzYLRup8J6R+cffwIAuOLxlLWbCgSMz6XBu11OUzgS5XoyXFcBLpzrwtzbeTYTC+Pj4oeyduXWuqjgUe//BRRZgtvlRDgSZTOxcE3PiAweB/HHSK0iaOtdaPAHhiJLuNrrLtsf6NfF811GX0AQBEEQBEEQBEEQBEEQBEEQBMGDH9PsmsA0xyrHAAAAAElFTkSuQmCC";
 
 const loadingBirdImg = new Image();
@@ -1095,7 +1096,7 @@ class Game {
     this.loadingBar = new Rect((this.vCanvas.width / 4) - 100,(this.vCanvas.height / 2) + 120,200,20);
     this.progressCount = 0;
     this.progressBar = new Rect(this.loadingBar.xPos,this.loadingBar.yPos,100,this.loadingBar.h);
-    this.playButton = new GameButton(30,0,100,20,"Play");
+    this.playButton = new GameButton((this.vCanvas.width/4),0,100,20,"Play");
     this.playButton.yPos = (this.vCanvas.height / 2);
     this.playButton.setBorder(10);
     this.runLoadingScreen(this.vCtx);

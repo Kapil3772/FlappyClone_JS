@@ -7,6 +7,10 @@ body {
   display: inline-block;
   justify-content: center;
   flex-flow: column;
+  touch-action: none; /* to disabling double tap zoom and pinch zoom */
+  -ms-touch-action: manipulation;
+  overscroll-behavior: none;
+  user-select: none;
 }
 
 @font-face {

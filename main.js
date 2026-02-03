@@ -1,6 +1,3 @@
-/*document.addEventListener("touchstart", e => e.preventDefault(), { passive: false });
-document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
-document.addEventListener("touchend", e => e.preventDefault(), { passive: false });*/
 
 class Rect {
   constructor(x,y,w,h){
@@ -1190,6 +1187,7 @@ class Game {
     if(!this.playButton.clickedOnce){
       requestAnimationFrame(() => this.runMenuScreen(this.vCtx));
     }else{
+      this.playButton.visible = false;
       this.resetTimeDependencies();
       this.run();
     }

@@ -1,3 +1,7 @@
+/*document.addEventListener("touchstart", e => e.preventDefault(), { passive: false });
+document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
+document.addEventListener("touchend", e => e.preventDefault(), { passive: false });*/
+
 class Rect {
   constructor(x,y,w,h){
     this.xPos = x;
@@ -34,6 +38,49 @@ class PhysicsRect extends Rect {
   intersects(rect){
     return this.right() > rect.left() && this.bottom() > rect.top() &&
     this.left() < rect.right() && this.top() < rect.bottom();
+  }
+  intersectsPoint(x,y){
+    return this.right() > x && this.left() < x && y > this.top() && y < this.bottom();
+  }
+}
+
+class GameButton extends PhysicsRect {
+  constructor(x,y,w,h,string){
+    super(x,y,w,h);
+    this.visible = false;
+    this.clickedOnce = false;
+    this.pressed = false;
+    this.released = true;
+    this.string = string;
+    this.borderWidth = 0;
+    this.borderHeight = 0;
+    this.borderColor = "black";
+    this.buttonColor = "white";
+    this.stringColor = "black";
+  }
+  setString(string){
+    this.string = string;
+  }
+  setBorder(x,y = x,color = "black"){
+    this.borderWidth = x;
+    this.borderHeight = y;
+    this.borderColor = color;
+  }
+  setVisible(bool){
+    this.visible = true;
+  }
+  render(ctx){
+    if(!this.visible) return;
+    //Border
+    ctx.fillStyle = this.borderColor;
+    ctx.fillRect(this.xPos - (this.borderWidth /2),this.yPos -(this.borderHeight/2),this.w+this.borderWidth,this.h + this.borderHeight);
+    //Button
+    ctx.fillStyle = this.buttonColor;
+    ctx.fillRect(this.xPos,this.yPos,this.w,this.h);
+    //String
+    ctx.fillStyle = this.stringColor;
+    ctx.font = "10px Tiny5-pixel";
+    ctx.fillText(this.string,this.centerX() - 15,this.bottom());
   }
 }
 
@@ -1047,10 +1094,13 @@ class Game {
     this.inputs = new GameInputs();
     
     //Assets for loading Screen
-    //this.canvas.addEventListener("click", (e) => this.handelPlayBtn(e));
+    this.canvas.addEventListener("click", (e) => this.handelPlayBtn(e));
     this.loadingBar = new Rect((this.vCanvas.width / 4) - 100,(this.vCanvas.height / 2) + 120,200,20);
     this.progressCount = 0;
     this.progressBar = new Rect(this.loadingBar.xPos,this.loadingBar.yPos,100,this.loadingBar.h);
+    this.playButton = new GameButton(30,0,100,20,"Play");
+    this.playButton.yPos = (this.vCanvas.height / 2);
+    this.playButton.setBorder(10);
     this.runLoadingScreen(this.vCtx);
     this.init();
   }
@@ -1064,13 +1114,9 @@ class Game {
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    if(
-      x >= this.playButton.x &&
-      x <= this.playButton.x + this.playButton.width &&
-      y >= this.playButton.y &&
-      y <= this.playButton.y + this.playButton.height
-    ) {
-        
+    if(this.playButton.intersectsPoint(x,y)) {
+        console.log("clicked");
+        this.playButton.clickedOnce = true;
     }
   }
   resize() {
@@ -1119,9 +1165,35 @@ class Game {
     );
     if(!this.assetReady){
       requestAnimationFrame(() => this.runLoadingScreen(this.vCtx));
+    }else{
+      this.playButton.visible = true;
+      this.runMenuScreen(this.vCtx);
     }
   }
   
+  runMenuScreen(ctx){
+    ctx.clearRect(0,0,this.vCanvas.width,this.vCanvas.height);
+    ctx.fillStyle = "lightBlue";
+    ctx.font = "20px Tiny5-pixel";
+    ctx.fillText(
+        "FLAPPY BIRD CLONE",(this.vCanvas.width / 4) - 180 ,(this.vCanvas.height/2) - 50
+    );
+    
+    this.playButton.render(ctx);
+      
+    this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
+    this.ctx.drawImage(this.vCanvas,
+        0,0,this.vCanvas.width,this.vCanvas.height,
+        0,0,this.vCanvas.width * 2,this.vCanvas.height * 2
+    );
+      
+    if(!this.playButton.clickedOnce){
+      requestAnimationFrame(() => this.runMenuScreen(this.vCtx));
+    }else{
+      this.resetTimeDependencies();
+      this.run();
+    }
+  }
   
   async init(){
     await this.loadAll();
@@ -1152,8 +1224,6 @@ class Game {
     this.screenShakeStoppingStrength = 0.4;
     this.shakeX = 0;
     this.shakeY = 0;
-    
-    this.run();
   }
   
   applyHitStop(frames){
@@ -1171,6 +1241,11 @@ class Game {
     this.shakeY = this.screenShakeStrength * Math.sin(angle);
     
     this.screenShakeStrength = Math.max(0,this.screenShakeStrength - this.screenShakeStoppingStrength);
+  }
+  resetTimeDependencies(){
+    this.updateAccumulator = 0;
+    this.nowMs = performance.now();
+    this.prevMs = this.nowMs;
   }
   run(){
     if(!this.isRunning) return;
@@ -1204,7 +1279,6 @@ class Game {
         if(this.computedFrameDuration < this.LOOP_STEP_DURATION){
           let sleepDuration = this.LOOP_STEP_DURATION - this.computedFrameDuration;
           //sleep fn
-          //await sleep(sleepDuration);
         }
     }
     
@@ -1257,7 +1331,6 @@ class Game {
   }
   
   update(dt){
-    if(this.inputs.updateResumed){
     if(this.hitStopTimer > 0){
      this.hitStopTimer = Math.max(this.hitStopTimer - dt, 0);
     }else{
@@ -1270,7 +1343,6 @@ class Game {
     }
     //Other updates
     this.updateScreenShake();
-    }
   }
   
   updateInterpolation(ipf){
@@ -1332,9 +1404,6 @@ atkBtn.addEventListener("touchend", (e) => {
 
 
 document.body.addEventListener("touchstart", (e) => {
-  if(!game.inputs.updateResumed){
-    game.inputs.updateResumed = true;
-  }
   const screenMid = window.innerWidth / 2;
 
   for (let i = 0; i < e.changedTouches.length; i++) {
@@ -1371,7 +1440,3 @@ document.body.addEventListener("touchend", (e) => {
     game.inputs.rightJumpHandeled = true;
   }
 });
-
-document.addEventListener("touchstart", e => e.preventDefault(), { passive: false });
-document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
-document.addEventListener("touchend", e => e.preventDefault(), { passive: false });

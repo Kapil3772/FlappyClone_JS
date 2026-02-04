@@ -67,7 +67,9 @@ class GameButton extends PhysicsRect {
     this.visible = true;
   }
   render(ctx){
-    if(!this.visible) return;
+    if(!this.visible){
+      return;
+    }
     //Border
     ctx.fillStyle = this.borderColor;
     ctx.fillRect(this.xPos - (this.borderWidth /2),this.yPos -(this.borderHeight/2),this.w+this.borderWidth,this.h + this.borderHeight);
@@ -395,6 +397,7 @@ class AttackHandler{
       this.entity.dealDamage(this.hitbox);
       if(!this.entity.speedBoostedOfAttack){
         this.entity.speedBoostedOfAttack = true;
+        this.entity.game.applyScreenShake(7);
          this.entity.velocityX=this.entity.facingRight?390:-390;
       }
     }
@@ -834,6 +837,7 @@ class Player extends PhysicsRect {
       this.currAttackHandler.update(dt);
       if(this.currAttackHandler.inactiveTimer > 0){
         this.velocityX = 0;
+        this.velocityY = 0;
       }
     }
   //X direction handel
@@ -1103,11 +1107,12 @@ class Game {
     this.playButton.setBorder(10);
     this.transitionBox1 = new Rect(-45,0,this.vCanvas.width / 4,this.vCanvas.height);
     this.transitionBox2 = new Rect((this.vCanvas.width/4)+45,0,this.vCanvas.width / 4,this.vCanvas.height);
-    this.startTransitionTime = 2;
+    this.startTransitionTime = 2.8;
     this.startTransitionTimer = this.startTransitionTime;
     this.transitionStarted = false;
     this.transitionFinished = false;
     this.logoFadeTransitionStarted = false;
+    this.logoFadeTransitionFinished = false;
     this.logoFadeTimer = 3;
     this.runLoadingScreen(this.vCtx);
     this.init();
@@ -1174,43 +1179,7 @@ class Game {
     }else{
       this.playButton.visible = true;
       this.resetTimeDependencies();
-      this.runMenuScreen(this.vCtx);
-    }
-  }
-  
-  runMenuScreen(ctx){
-    /*
-    this.nowMs = performance.now();
-    const deltaTime = (this.nowMs - this.prevMs) / 1000;
-    this.prevMs = this.nowMs;
-    */
-    ctx.clearRect(0,0,this.vCanvas.width,this.vCanvas.height);
-    
-    ctx.fillStyle = "black";
-    ctx.fillRect(this.transitionBox1.xPos,this.transitionBox1.yPos,this.transitionBox1.w,this.transitionBox1.h);
-    ctx.fillRect(this.transitionBox2.xPos,this.transitionBox2.yPos,this.transitionBox2.w,this.transitionBox2.h);
-    
-    ctx.fillStyle = "lightBlue";
-    ctx.font = "20px Tiny5-pixel";
-    ctx.fillText(
-        "FLAPPY BIRD CLONE",(this.vCanvas.width / 4) - 180 ,(this.vCanvas.height/2) - 50
-    );
-    
-    this.playButton.render(ctx);
-      
-    this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
-    this.ctx.drawImage(this.vCanvas,
-        0,0,this.vCanvas.width,this.vCanvas.height,
-        0,0,this.vCanvas.width * 2,this.vCanvas.height * 2
-    );
-    
-    if(this.playButton.clickedOnce && !this.transitionStarted){
-      this.transitionStarted = true;
-      this.resetTimeDependencies();
       this.run();
-    }
-    if(!this.playButton.clickedOnce){
-      requestAnimationFrame(() => this.runMenuScreen(this.vCtx));
     }
   }
   
@@ -1352,8 +1321,18 @@ class Game {
   update(dt){
     if(this.logoFadeTransitionStarted){
       this.logoFadeTimer = Math.max(0,this.logoFadeTimer-dt);
+      if(this.logoFadeTimer<=0 && !this.logoFadeTransitionFinished) {
+        this.logoFadeTransitionFinished=true;
+        this.resetTimeDependencies();
+      }
     }
-    
+    if(!this.playButton.clickedOnce){
+      this.camera.update(dt);
+      return;
+    }
+    if(this.playButton.clickedOnce && !this.transitionStarted){
+      this.transitionStarted = true;
+    }
     if(this.hitStopTimer > 0){
      this.hitStopTimer = Math.max(this.hitStopTimer - dt, 0);
     }else{
@@ -1412,10 +1391,13 @@ class Game {
     
     //player render
     this.player.render(ctx);
-    this.camera.render(ctx);
+    //this.camera.render(ctx);
     
+    if(!this.playButton.clickedOnce){
+      this.renderMenuOverlay(ctx);
+    }
     //transition rendering
-    if(!this.transitionFinished){
+    if(!this.transitionFinished && this.transitionStarted){
       this.renderStartTransition(ctx);
     }
     if(this.logoFadeTimer > 0 && this.logoFadeTransitionStarted){
@@ -1448,6 +1430,18 @@ class Game {
     ctx.fillText(
         "FLAPPY BIRD CLONE",(this.vCanvas.width / 4) - 180 ,(this.vCanvas.height/2) - 50
     );
+  }
+  renderMenuOverlay(ctx){
+    ctx.fillStyle = "black";
+      ctx.fillRect(this.transitionBox1.xPos,this.transitionBox1.yPos,this.transitionBox1.w,this.transitionBox1.h);
+      ctx.fillRect(this.transitionBox2.xPos,this.transitionBox2.yPos,this.transitionBox2.w,this.transitionBox2.h);
+    
+      ctx.fillStyle = "white";
+      ctx.font = "20px Tiny5-pixel";
+      ctx.fillText(
+        "FLAPPY BIRD CLONE",(this.vCanvas.width / 4) - 180 ,(this.vCanvas.height/2) - 50
+      );
+      this.playButton.render(ctx);
   }
 }
 

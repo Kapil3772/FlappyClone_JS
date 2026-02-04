@@ -77,7 +77,7 @@ class GameButton extends PhysicsRect {
     //String
     ctx.fillStyle = this.stringColor;
     ctx.font = "10px Tiny5-pixel";
-    ctx.fillText(this.string,this.centerX() - 15,this.bottom());
+    ctx.fillText(this.string,this.centerX() - 15,this.bottom() - 5);
   }
 }
 
@@ -947,7 +947,7 @@ class Player extends PhysicsRect {
   }
   
   updateRenderOffset(){
-    
+    if(this.img == null) return;
     this.finalRenderOffset.xPos = this.animRenderOffset.xPos + (this.w - (this.img.width * this.imgScalingFactor) / 2.0);
     this.finalRenderOffset.yPos = this.animRenderOffset.yPos + (this.h - this.img.height);
     this.finalRenderOffset.w = this.animRenderOffset.w;
@@ -965,6 +965,7 @@ class Player extends PhysicsRect {
       this.w,
       this.h
     );
+    return;
   }
   
   this.updateRenderOffset();
@@ -1096,9 +1097,18 @@ class Game {
     this.loadingBar = new Rect((this.vCanvas.width / 4) - 100,(this.vCanvas.height / 2) + 120,200,20);
     this.progressCount = 0;
     this.progressBar = new Rect(this.loadingBar.xPos,this.loadingBar.yPos,100,this.loadingBar.h);
-    this.playButton = new GameButton((this.vCanvas.width/4),0,100,20,"Play");
+    //Assets for Menu Screen
+    this.playButton = new GameButton(30,0,100,20,"Play");
     this.playButton.yPos = (this.vCanvas.height / 2);
     this.playButton.setBorder(10);
+    this.transitionBox1 = new Rect(-45,0,this.vCanvas.width / 4,this.vCanvas.height);
+    this.transitionBox2 = new Rect((this.vCanvas.width/4)+45,0,this.vCanvas.width / 4,this.vCanvas.height);
+    this.startTransitionTime = 2;
+    this.startTransitionTimer = this.startTransitionTime;
+    this.transitionStarted = false;
+    this.transitionFinished = false;
+    this.logoFadeTransitionStarted = false;
+    this.logoFadeTimer = 3;
     this.runLoadingScreen(this.vCtx);
     this.init();
   }
@@ -1106,8 +1116,8 @@ class Game {
     if (!this.playButton.visible) return;
 
     const rect = this.canvas.getBoundingClientRect();
-    const scaleX = this.vCanvas.width / this.canvas.width;
-    const scaleY = this.vCanvas.height / this.canvas.height;
+    const scaleX = 0.5;
+    const scaleY = 0.5;
 
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
@@ -1154,10 +1164,8 @@ class Game {
       ctx.drawImage(loadingBirdImg,
       this.loadingBar.xPos - 40 + this.progressBar.w,this.loadingBar.yPos -33,100,100
       )
-    }else{
-      //Tap to play Menu
-      
     }
+    
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.ctx.drawImage(this.vCanvas,0, 0, this.vCanvas.width, this.vCanvas.height,0, 0, this.vCanvas.width * 2, this.vCanvas.height * 2
     );
@@ -1165,12 +1173,23 @@ class Game {
       requestAnimationFrame(() => this.runLoadingScreen(this.vCtx));
     }else{
       this.playButton.visible = true;
+      this.resetTimeDependencies();
       this.runMenuScreen(this.vCtx);
     }
   }
   
   runMenuScreen(ctx){
+    /*
+    this.nowMs = performance.now();
+    const deltaTime = (this.nowMs - this.prevMs) / 1000;
+    this.prevMs = this.nowMs;
+    */
     ctx.clearRect(0,0,this.vCanvas.width,this.vCanvas.height);
+    
+    ctx.fillStyle = "black";
+    ctx.fillRect(this.transitionBox1.xPos,this.transitionBox1.yPos,this.transitionBox1.w,this.transitionBox1.h);
+    ctx.fillRect(this.transitionBox2.xPos,this.transitionBox2.yPos,this.transitionBox2.w,this.transitionBox2.h);
+    
     ctx.fillStyle = "lightBlue";
     ctx.font = "20px Tiny5-pixel";
     ctx.fillText(
@@ -1184,13 +1203,14 @@ class Game {
         0,0,this.vCanvas.width,this.vCanvas.height,
         0,0,this.vCanvas.width * 2,this.vCanvas.height * 2
     );
-      
-    if(!this.playButton.clickedOnce){
-      requestAnimationFrame(() => this.runMenuScreen(this.vCtx));
-    }else{
-      this.playButton.visible = false;
+    
+    if(this.playButton.clickedOnce && !this.transitionStarted){
+      this.transitionStarted = true;
       this.resetTimeDependencies();
       this.run();
+    }
+    if(!this.playButton.clickedOnce){
+      requestAnimationFrame(() => this.runMenuScreen(this.vCtx));
     }
   }
   
@@ -1208,7 +1228,7 @@ class Game {
     this.tileMap = new TileMap(this.mapData, this.tileVariantRegistry, this);
     console.log(this.tileMap.onGridTiles);
     //Entity Creation
-    this.player = new Player(96, 96, 20, 28, this);
+    this.player = new Player(96, -700, 20, 28, this);
     //camera object
     this.camera = new Camera(this.player.xPos,this.player.yPos,10,10,this.player,this);
     
@@ -1330,14 +1350,30 @@ class Game {
   }
   
   update(dt){
+    if(this.logoFadeTransitionStarted){
+      this.logoFadeTimer = Math.max(0,this.logoFadeTimer-dt);
+    }
+    
     if(this.hitStopTimer > 0){
      this.hitStopTimer = Math.max(this.hitStopTimer - dt, 0);
     }else{
-      this.player.update(dt);
-      this.camera.update(dt);
-      for (const enemy of this.enemies)
-      {
-          enemy.update(dt);
+      if(!this.transitionFinished && this.transitionStarted){
+        this.startTransitionTimer -= dt;
+        const dx = ((this.vCanvas.width/4)/this.startTransitionTime) * dt;
+        this.transitionBox1.xPos -= dx;
+        this.transitionBox2.xPos += dx;
+        if(this.startTransitionTimer <= 0){
+          this.transitionFinished = true;
+          this.logoFadeTransitionStarted=true;
+        }
+        this.camera.update(dt);
+      }else{
+        this.camera.update(dt);
+        this.player.update(dt);
+        for (const enemy of this.enemies)
+          {
+            enemy.update(dt);
+          }
       }
     }
     //Other updates
@@ -1356,7 +1392,10 @@ class Game {
     for (const enemy of this.enemies) {
       enemy.updateAnimation(deltaTime);
     }
+    
+    //Other Animation Updates
   }
+  
   render(ctx){
     //Clearing screen
     ctx.clearRect(0,0,this.vCanvas.width,this.vCanvas.height);
@@ -1375,6 +1414,14 @@ class Game {
     this.player.render(ctx);
     this.camera.render(ctx);
     
+    //transition rendering
+    if(!this.transitionFinished){
+      this.renderStartTransition(ctx);
+    }
+    if(this.logoFadeTimer > 0 && this.logoFadeTransitionStarted){
+      this.renderLogoFadeTransition(ctx);
+    }
+    
     //scaling the virtual ctx
     this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);
     this.ctx.drawImage(
@@ -1384,7 +1431,24 @@ class Game {
       0,0,this.vCanvas.width *2,this.vCanvas.height *2
     );
   }
-  
+  renderStartTransition(ctx){
+    ctx.fillStyle = "black";
+    ctx.fillRect(this.transitionBox1.xPos,this.transitionBox1.yPos,this.transitionBox1.w,this.transitionBox1.h);
+    ctx.fillRect(this.transitionBox2.xPos,this.transitionBox2.yPos,this.transitionBox2.w,this.transitionBox2.h);
+    ctx.fillStyle = "black";
+    ctx.font = "20px Tiny5-pixel";
+    ctx.fillText(
+        "FLAPPY BIRD CLONE",(this.vCanvas.width / 4) - 180 ,(this.vCanvas.height/2) - 50
+    );
+  }
+  renderLogoFadeTransition(ctx){
+    const opacity = (1.0/2) * this.logoFadeTimer;
+    ctx.fillStyle = `rgba(0,0,0,${opacity})`;
+    ctx.font = "20px Tiny5-pixel";
+    ctx.fillText(
+        "FLAPPY BIRD CLONE",(this.vCanvas.width / 4) - 180 ,(this.vCanvas.height/2) - 50
+    );
+  }
 }
 
 const game = new Game();
